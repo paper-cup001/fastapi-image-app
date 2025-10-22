@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>レトロゲーム画像アップローダー</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <style>
+    #thumbnails {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    #thumbnails .img-thumbnail {
+      width: 100%;
+      max-width: 480px;
+      height: auto;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto;
+    }
+    @media (max-width: 576px) {
+      #thumbnails .img-thumbnail {
+        max-width: 98vw;
+      }
+    }
+    .btn-full { width: 100%; }
+    .btn-half { width: 49%; }
+  </style>
+  <script>
+    let cvInitialized = false;
+    // Define onRuntimeInitialized globally or before opencv.js loads
+    window.Module = {
+      onRuntimeInitialized: function() {
+        console.log('OpenCV.js is ready.');
+        cvInitialized = true;
+        $('#start-new').prop('disabled', false).text('新規撮影'); // ボタンを有効化
+      }
+    };
+  </script>
+  <!-- OpenCV.jsの読み込み -->
+  <script async src="/static/opencv.js" type="text/javascript"></script>
+</head>
+<body class="container py-3">
+
+  <h1 class="mb-4">📷 商品画像のアップロード</h1>
+  <div>
+    <span id="group-id-display" class="fw-bold"></span>
+    <span id="resolution-display" class="text-info ms-3"></span><br />
+    <span id="uuid-display" class="text-muted"></span>
+    <div class="form-check form-check-inline ms-3">
+      <input class="form-check-input" type="checkbox" id="fast-mode" value="fast">
+      <label class="form-check-label" for="fast-mode">はやい</label>
+    </div>
+  </div>
+  
+  <!-- 品質・コメント選択（アコーディオン1つに統合） -->
+  <div class="accordion mb-4" id="qualityCommentAccordion">
+    <div class="accordion-item">
+      <h2 class="accordion-header" id="headingQualityComment">
+        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseQualityComment" aria-expanded="false" aria-controls="collapseQualityComment">
+          品質・コメントを選択
+        </button>
+      </h2>
+      <div id="collapseQualityComment" class="accordion-collapse collapse" aria-labelledby="headingQualityComment" data-bs-parent="#qualityCommentAccordion">
+        <div class="accordion-body">
+          <!-- 品質選択 -->
+          <div class="mb-3">
+            <label for="quality" class="form-label">品質:</label>
+            <select id="quality" name="quality" class="form-select">
+              <option value="0" selected>0: 未確認</option>
+              <option value="1">1: 故障 or 販売不可</option>
+              <option value="2">2: 傷や汚れあり</option>
+              <option value="3">3: やや傷や汚れあり</option>
+              <option value="4">4: 傷や汚れはわずか</option>
+              <option value="5">5: 未使用品</option>
+              <option value="6">6: 新品 or 未開封品</option>
+            </select>
+          </div>
+          <!-- コメント選択 -->
+          <div class="mb-4">
+            <label class="form-label">コメント:</label><br>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" id="no-box-manual" value="箱説なし">
+              <label class="form-check-label" for="no-box-manual">箱説なし</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" id="no-box" value="箱なし">
+              <label class="form-check-label" for="no-box">箱なし</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" id="no-manual" value="説明書なし">
+              <label class="form-check-label" for="no-manual">説明書なし</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" id="no-accessory" value="付属品欠品">
+              <label class="form-check-label" for="no-accessory">付属品欠品</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" id="box-damage" value="箱いたみ">
+              <label class="form-check-label" for="box-damage">箱いたみ</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" id="manual-damage" value="説明書いたみ">
+              <label class="form-check-label" for="manual-damage">説明書いたみ</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" id="battery-dead" value="バッテリー切れ">
+              <label class="form-check-label" for="battery-dead">バッテリー切れ</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" id="case-damage" value="ケースにヒビ・割れ">
+              <label class="form-check-label" for="case-damage">ケースにヒビ or ケース割れ</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" id="misc" value="その他">
+              <label class="form-check-label" for="misc">その他</label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="shoot-section" style="display: none;">
+    <form id="shoot-form" enctype="multipart/form-data">
+      <input type="file" id="shoot-file" name="file" accept="image/*" capture="environment" style="display: none;" />
+      <input type="hidden" id="group_id" name="group_id" value="sample_01" />
+      <input type="hidden" id="source_page" name="source_page" value="upload" />
+    </form>
+
+    <div>
+      <h2 class="h5">サムネイルプレビュー（最大10枚）</h2>
+      <div id="thumbnails" class="d-flex flex-wrap gap-2 mb-5"></div>
+    </div>
+  </div>
+
+  <div id="bottom-buttons" class="fixed-bottom bg-white border-top p-3">
+    <button id="start-new" class="btn btn-primary btn-full" disabled>新規撮影</button>
+    <div id="shoot-controls" style="display: none;">
+      <div class="mb-2">
+        <button type="button" id="shoot-btn" class="btn btn-primary btn-full mb-2">撮影</button>
+      </div>
+      <div class="d-flex justify-content-between gap-2">
+        <button type="button" id="cancel-btn" class="btn btn-warning btn-half">取り消し</button>
+        <button type="button" id="finish-btn" class="btn btn-success btn-half">撮影終了</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    $(document).ready(function() {
+
+    function generateShortID() {
+      return Math.random().toString(36).substr(2, 8);
+    }
+
+    let userShortID = localStorage.getItem('user_short_id');
+    if (!userShortID) {
+      userShortID = generateShortID();
+      localStorage.setItem('user_short_id', userShortID);
+    }
+    $('#uuid-display').text('あなたの端末ID: ' + userShortID);
+
+    function getQueryParam(name) {
+      const url = new URL(window.location.href);
+      return url.searchParams.get(name);
+    }
+
+    const urlGroupId = getQueryParam('group_id');
+    if (urlGroupId) {
+      $('#group_id').val(urlGroupId);
+    }
+    let groupId = $('#group_id').val();
+
+    function showGroupId() {
+      $('#group-id-display').text('グループID: ' + groupId);
+    }
+    function updateGroupId() {
+      groupId = $('#group_id').val();
+      showGroupId();
+    }
+    updateGroupId();
+
+    let thumbnails = [];
+    function checkAdminDeleteAndResetIfNeeded() {
+      // サムネイル数
+      const thumbnailCount = thumbnails.length;
+      if (thumbnailCount === 0) return;
+      
+      // temp_imagesのファイル一覧取得
+      $.getJSON('/photographer/temp_list', { group_id: groupId }, function (data) { // temp_files -> temp_list
+        const tempFiles = data.files || [];
+        // 条件2A: temp_imagesが空
+        const isTempEmpty = tempFiles.length === 0;
+        // 条件2B: temp_imagesに自分の端末IDを含むファイルがない
+        const hasMyFile = tempFiles.some(f => f.includes(userShortID));
+        if (isTempEmpty || !hasMyFile) {
+          // 管理者による削除とみなして初期画面に戻す
+          alert('⚠️ 管理者により画像が削除されました。初期画面に戻ります。');
+          thumbnails = [];
+          updateThumbnails();
+          $('#shoot-section').hide();
+          $('#shoot-controls').hide();
+          $('#start-new').show();
+        }
+      });
+    }
+    $('#start-new').on('click', function () {
+      thumbnails = [];
+      $('#thumbnails').empty();
+      $('#start-new').hide();
+      $('#shoot-controls').show();
+      $('#shoot-section').show();
+      $('#shoot-btn').prop('disabled', false);
+      updateGroupId();
+
+      // 品質を初期値（0: 未確認）に戻す
+      $('#quality').val('0');
+      // コメントのチェックをすべて外す
+      $('.accordion-body input[type=checkbox]').prop('checked', false);
+      $('#resolution-display').text('');
+    });
+
+    $('#shoot-btn').on('click', function () {
+      if (thumbnails.length >= 10) return;
+      $('#shoot-file').click();
+      // 撮影時にチェック
+      checkAdminDeleteAndResetIfNeeded();
+    });
+
+    $('#shoot-file').on('change', function () {
+      if (!this.files.length) return;
+      const file = this.files[0];
+      $(this).val(''); // inputをリセット
+
+      if (!cvInitialized) {
+        console.log('OpenCV.js is not initialized yet. cvInitialized:', cvInitialized);
+        alert('OpenCV.jsがまだ読み込まれていません。しばらく待ってから再度お試しください。');
+        return;
+      }
+      console.log('OpenCV.js is initialized. Starting image processing.');
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          const totalStartTime = performance.now(); // Start total timer
+
+          console.log('img.onload fired.');
+
+          const quality = $('#fast-mode').is(':checked') ? 'normal' : 'large';
+          let MAX_PIXELS;
+          if (quality === 'fast') {
+            MAX_PIXELS = 1200;
+          } else if (quality === 'normal') {
+            MAX_PIXELS = 1800;
+          } else {
+            MAX_PIXELS = 2400;
+          }
+          console.log(`Quality set to: ${quality}, MAX_PIXELS: ${MAX_PIXELS}`);
+
+          let newWidth = img.width;
+          let newHeight = img.height;
+
+          if (img.width > MAX_PIXELS || img.height > MAX_PIXELS) {
+              if (img.width > img.height) {
+                  newWidth = MAX_PIXELS;
+                  newHeight = Math.round((img.height * MAX_PIXELS) / img.width);
+              } else {
+                  newHeight = MAX_PIXELS;
+                  newWidth = Math.round((img.width * MAX_PIXELS) / img.height);
+              }
+          }
+
+          // 画像を一時的なCanvasに描画してOpenCVに渡す
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = newWidth;
+          tempCanvas.height = newHeight;
+          const tempCtx = tempCanvas.getContext('2d');
+          console.log('Before drawImage. img dimensions:', img.width, img.height, 'new dimensions:', newWidth, newHeight);
+          tempCtx.drawImage(img, 0, 0, newWidth, newHeight);
+          console.log('After drawImage.');
+
+          const imreadStartTime = performance.now(); // Start imread timer
+          console.log('Before cv.imread.');
+          const src = cv.imread(tempCanvas);
+          const imreadEndTime = performance.now(); // End imread timer
+          console.log('After cv.imread. src dimensions:', src.cols, src.rows, 'Time:', (imreadEndTime - imreadStartTime).toFixed(2), 'ms');
+
+          const dst = new cv.Mat();
+          const gray = new cv.Mat(); // グレースケール画像用
+
+          const cvtColorStartTime = performance.now(); // Start cvtColor timer
+          cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY); // グレースケールに変換
+          const cvtColorEndTime = performance.now(); // End cvtColor timer
+          console.log('Gray Mat properties: cols=', gray.cols, ', rows=', gray.rows, ', type=', gray.type(), ', channels=', gray.channels(), 'Time:', (cvtColorEndTime - cvtColorStartTime).toFixed(2), 'ms');
+
+          const qrcode = new cv.QRCodeDetector();
+          const points = new cv.Mat();
+          const decodedInfo = new cv.StringVector();
+
+          try {
+            const detectStartTime = performance.now(); // Start detect timer
+            console.log('Before detectAndDecodeMulti.');
+            qrcode.detectAndDecodeMulti(gray, decodedInfo, points); // グレースケール画像を渡す
+            const detectEndTime = performance.now(); // End detect timer
+            console.log('After detectAndDecodeMulti. QR code detection result - decodedInfo size:', decodedInfo.size(), 'points rows:', points.rows, 'Time:', (detectEndTime - detectStartTime).toFixed(2), 'ms');
+
+            const postDetectStartTime = performance.now(); // Start post-detection JS logic timer
+
+            const validQrCodes = ["F1", "F2", "F3", "B1", "B2", "B3"];
+            const dMarkerInt = {};
+
+            for (let i = 0; i < decodedInfo.size(); ++i) {
+              const info = decodedInfo.get(i);
+              if (validQrCodes.includes(info)) {
+                const pointData = [];
+                for (let j = 0; j < points.cols; ++j) {
+                  pointData.push({ x: points.data32F[i * points.cols * 2 + j * 2], y: points.data32F[i * points.cols * 2 + j * 2 + 1] });
+                }
+                dMarkerInt[info] = pointData;
+              }
+            }
+            console.log('Filtered QR codes (dMarkerInt):', dMarkerInt);
+
+            if (Object.keys(dMarkerInt).length < 3) {
+              console.log("QRコードが3つ見つかりませんでした。検出された有効なQRコード:", Object.keys(dMarkerInt));
+              // QRコードが見つからない場合は元の画像をアップロード
+              uploadImage(file);
+              return;
+            }
+
+            console.log("QRコードが見つかりました", dMarkerInt);
+
+            // logic_sample.pyのfind_corner_pointをJavaScriptで実装
+            function findCornerPoint(points, corner = "right") {
+              if (points.length === 0) return null;
+
+              let targetPoint = null;
+              if (corner === "right") {
+                // 右上の点を選択：x座標の最大値とy座標の最小値を持つ点
+                let maxX = -Infinity;
+                let minY = Infinity;
+                points.forEach(p => {
+                  if (p.x > maxX) maxX = p.x;
+                  if (p.y < minY) minY = p.y;
+                });
+                let minDist = Infinity;
+                points.forEach(p => {
+                  const dist = Math.sqrt(Math.pow(maxX - p.x, 2) + Math.pow(minY - p.y, 2));
+                  if (dist < minDist) {
+                    minDist = dist;
+                    targetPoint = p;
+                  }
+                });
+              } else {
+                // 左上の点を選択：x座標の最小値とy座標の最小値を持つ点
+                let minX = Infinity;
+                let minY = Infinity;
+                points.forEach(p => {
+                  if (p.x < minX) minX = p.x;
+                  if (p.y < minY) minY = p.y;
+                });
+                let minDist = Infinity;
+                points.forEach(p => {
+                  const dist = Math.sqrt(Math.pow(minX - p.x, 2) + Math.pow(minY - p.y, 2));
+                  if (dist < minDist) {
+                    minDist = dist;
+                    targetPoint = p;
+                  }
+                });
+              }
+              return targetPoint;
+            }
+
+            // logic_sample.pyの治具の左右確定ロジックをJavaScriptで実装
+            const centerX = src.cols / 2;
+            let leftCount = 0;
+            let rightCount = 0;
+            for (const key in dMarkerInt) {
+              dMarkerInt[key].forEach(p => {
+                if (p.x < centerX) {
+                  leftCount++;
+                } else {
+                  rightCount++;
+                }
+              });
+            }
+
+            let side = "";
+            if (leftCount < rightCount) {
+              side = "left";
+            } else if (rightCount <= leftCount) {
+              side = "right";
+            } else {
+              side = "undetermined";
+            }
+            console.log(`Detected side: ${side}`);
+
+            const cornerPoints = [];
+            for (const key in dMarkerInt) {
+              const cornerPoint = findCornerPoint(dMarkerInt[key], side);
+              if (cornerPoint) {
+                cornerPoints.push(cornerPoint);
+              }
+            }
+            console.log("コーナーポイント", cornerPoints);
+
+            const postDetectEndTime = performance.now(); // End post-detection JS logic timer
+            console.log('Post-detection JS logic time:', (postDetectEndTime - postDetectStartTime).toFixed(2), 'ms');
+
+
+            if (cornerPoints.length >= 3) {
+              // トリミング座標の決定。X_MIN, X_MAX, Y_MIN, Y_MAX は調整値として定義
+              // TODO: これらの値を適切に定義する必要があります
+              let offset = 10; // Default for normal
+              if (quality === 'fast') {
+                offset = 8;
+              } else if (quality === 'large') {
+                offset = 12;
+              }
+              const X_MIN = offset;
+              const X_MAX = -offset;
+              const Y_MIN = offset;
+              const Y_MAX = -offset;
+
+              const xMin = Math.min(...cornerPoints.map(p => p.x)) + X_MIN;
+              const xMax = Math.max(...cornerPoints.map(p => p.x)) + X_MAX;
+              const yMin = Math.min(...cornerPoints.map(p => p.y)) + Y_MIN;
+              const yMax = Math.max(...cornerPoints.map(p => p.y)) + Y_MAX;
+
+              const rect = new cv.Rect(xMin, yMin, xMax - xMin, yMax - yMin);
+              const croppedImage = src.roi(rect);
+
+              const imshowBlobStartTime = performance.now(); // Start imshow/blob timer
+              // Canvasに描画してBlobに変換
+              const canvas = document.createElement('canvas');
+              cv.imshow(canvas, croppedImage);
+              $('#resolution-display').text(`${croppedImage.cols}x${croppedImage.rows}`);
+              canvas.toBlob(function(blob) {
+                const croppedFile = new File([blob], file.name, { type: 'image/jpeg' });
+                uploadImage(croppedFile);
+                const imshowBlobEndTime = performance.now(); // End imshow/blob timer (inside async callback)
+                console.log('cv.imshow and canvas.toBlob time:', (imshowBlobEndTime - imshowBlobStartTime).toFixed(2), 'ms');
+              }, 'image/jpeg');
+
+              croppedImage.delete();
+            } else {
+              console.log("マーカーが3つ認識できませんでした");
+              uploadImage(file); // トリミングせずに元の画像をアップロード
+            }
+          } catch (err) {
+            console.error("OpenCV処理エラー:", err);
+            uploadImage(file); // エラー時は元の画像をアップロード
+          } finally {
+            src.delete();
+            dst.delete();
+            gray.delete(); // grayを解放
+            qrcode.delete();
+            points.delete();
+            decodedInfo.delete();
+            const totalEndTime = performance.now(); // End total timer
+            console.log('Total img.onload execution time:', (totalEndTime - totalStartTime).toFixed(2), 'ms');
+          }
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    function uploadImage(fileToUpload) {
+      const formData = new FormData();
+      formData.append('file', fileToUpload);
+      formData.append('group_id', groupId);
+      formData.append('user_short_id', userShortID);
+
+      $.ajax({
+        url: '/photographer/temp_upload',
+        type: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function (data) {
+          if (data.thumbnail) {
+            thumbnails.push(data);
+            updateThumbnails();
+            if (thumbnails.length >= 10) {
+              $('#shoot-btn').prop('disabled', true);
+            }
+          }
+          if (data.test_mode === true) {
+            alert('このウェブアプリは試用モードであるため、あなたの画像は保存されません。');
+          }
+          checkAdminDeleteAndResetIfNeeded();
+        },
+        error: function () {
+          alert('❌ 撮影エラー');
+          checkAdminDeleteAndResetIfNeeded();
+        }
+      });
+    }
+
+    $('#cancel-btn').on('click', function () {
+      if (thumbnails.length === 0) return;
+      $.ajax({
+        url: '/photographer/temp_delete',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ group_id: groupId, user_short_id: userShortID }),
+        success: function (res) {
+          thumbnails.pop();
+          updateThumbnails();
+          $('#shoot-btn').prop('disabled', thumbnails.length >= 10);
+          $('#resolution-display').text('');
+          checkAdminDeleteAndResetIfNeeded();
+        },
+        error: function () {
+          alert('画像の削除に失敗しました');
+          checkAdminDeleteAndResetIfNeeded();
+        }
+      });
+    });
+
+    $('#finish-btn').on('click', function () {
+      if (thumbnails.length === 0) {
+        alert('❌ 画像がありません');
+        return;
+      }
+      const comments = [];
+      $('#collapseQualityComment input[type=checkbox]:checked').each(function() {
+        comments.push($(this).val());
+      });
+
+      $.ajax({
+        url: '/photographer/finalize_upload',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+          group_id: groupId,
+          filenames: thumbnails.map(t => t.filename),
+          user_short_id: userShortID,
+          quality: $('#quality').val(),
+          comment: comments
+        }),
+        success: function (res) {
+          if (res && res.success === false && res.message) {
+            alert(res.message);
+          } else {
+            alert(thumbnails.length + '枚の画像を登録しました');
+          }
+          thumbnails = [];
+          updateThumbnails();
+          $('#shoot-section').hide();
+          $('#shoot-controls').hide();
+          $('#start-new').show();
+          $('#quality').val('0');
+          $('.accordion-body input[type=checkbox]').prop('checked', false);
+          $('#resolution-display').text('');
+          checkAdminDeleteAndResetIfNeeded();
+        },
+        error: function (xhr) {
+          let msg = '❌ 登録エラー';
+          if (xhr.responseJSON && xhr.responseJSON.error) {
+            msg = xhr.responseJSON.error;
+          }
+          alert(msg);
+          checkAdminDeleteAndResetIfNeeded();
+        }
+      });
+    });
+
+    function updateThumbnails() {
+      $('#thumbnails').empty();
+      thumbnails.slice().reverse().forEach(t => {
+        $('#thumbnails').append(`<div class="col-12 col-md-6"><img src="data:image/jpeg;base64,${t.thumbnail}" class="img-thumbnail"></div>`);
+      });
+    }
+
+    window.addEventListener('beforeunload', function () {
+      if (thumbnails.length > 0) {
+        navigator.sendBeacon(
+          '/photographer/temp_delete',
+          JSON.stringify({ group_id: groupId, filenames: thumbnails.map(t => t.filename) })
+        );
+      }
+    });
+    }); // End of $(document).ready()
+  </script>
+</body>
+</html>

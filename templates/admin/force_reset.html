@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>一時保存削除 - 管理者画面</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body class="bg-light">
+  <div class="container py-5">
+    <h1 class="mb-4">🧹 一時保存画像の全削除</h1>
+
+    <div id="status-message" class="alert d-none" role="alert"></div>
+
+    <hr class="my-4" />
+
+    <h5>🗂 GridFSに保存された一時画像ファイル一覧</h5>
+    <ul id="temp-files" class="list-group mb-4"></ul>
+    <p>この機能は、撮影中にブラウザ再読込をするなどして、データベースに正式に登録されないデータがある場合、それらの消去を目的としています。</p>
+    <p>
+      管理者が一括削除を実行すると、GridFSの
+      <code>temporary=true</code>なファイルと、
+      メモリ上の仮登録リスト（<code>TEMP_IMAGES</code>）が初期化されます。
+    </p>
+
+    <div class="d-flex mb-4 gap-2">
+      <button id="delete-all-btn" class="btn btn-danger">
+        一時画像を全て削除
+      </button>
+      <a href="/admin/dashboard" class="btn btn-secondary">戻る</a>
+    </div>
+  </div>
+
+  <script>
+    function showMessage(msg, type) {
+      const alertBox = $("#status-message");
+      alertBox
+        .removeClass()
+        .addClass(`alert alert-${type}`)
+        .text(msg)
+        .removeClass("d-none");
+    }
+
+    function loadTempFiles() {
+      // 管理用APIとして /admin/temp_files (GET) を用意しておく想定
+      $.getJSON("/admin/temp_files", function (data) {
+        const list = $("#temp-files").empty();
+        if (!data.files || data.files.length === 0) {
+          list.append(
+            '<li class="list-group-item text-muted">一時画像ファイルはありません。</li>'
+          );
+        } else {
+          data.files.forEach((file) => {
+            list.append(`<li class="list-group-item">🖼 ${file.filename}</li>`);
+          });
+        }
+      }).fail(function () {
+        showMessage("⚠️ 一時画像ファイル一覧の取得に失敗しました。", "warning");
+      });
+    }
+
+    $("#delete-all-btn").on("click", function () {
+      if (
+        !confirm("GridFSの一時画像と仮登録リストを全て削除します。撮影作業中のユーザーがいないこと確認してください。よろしいですか？")
+      ) {
+        return;
+      }
+
+      $.ajax({
+        url: "/admin/force_reset",
+        type: "POST",
+        success: function (data) {
+          showMessage(data.message || "✅ 一時画像を全て削除しました。", "success");
+          loadTempFiles();
+        },
+        error: function (xhr) {
+          const msg = xhr.responseJSON?.error || "❌ 通信エラーが発生しました。";
+          showMessage(msg, "danger");
+        },
+      });
+    });
+
+    // 初回読み込み時にファイル一覧を表示
+    $(document).ready(function () {
+      loadTempFiles();
+    });
+  </script>
+</body>
+</html>

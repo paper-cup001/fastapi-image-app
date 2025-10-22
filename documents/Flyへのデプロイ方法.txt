@@ -1,0 +1,149 @@
+Fly.ioへのFastAPI + MongoDB Atlasデプロイ手順
+
+作業は大きく分けて以下の3つのステップになります。
+
+1.  MongoDB Atlas のセットアップ
+2.  FastAPI アプリケーションの準備
+3.  Fly.io へのデプロイ
+
+---
+
+### ステップ1: MongoDB Atlas のセットアップ
+
+1.  **Atlasアカウント作成**: [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) にアクセスし、無料アカウントを作成します。
+2.  **無料クラスター作成**:
+    *   ログイン後、新しいプロジェクトを作成します。
+    *   「Build a Database」をクリックし、無料の `M0`プランを選択します。
+    *   クラウドプロバイダとリージョンを選択します。
+    *   クラスター名を設定し、「Create Cluster」をクリックします。
+3.  **データベースユーザー作成**:
+    *   左側のメニューから「Database Access」を選択します。
+    *   「Add New Database User」をクリックします。
+    *   ユーザー名とパスワードを設定し、安全な場所に控えておきます。
+    *   「Built-in Role」で `Atlas Admin` を選択し、ユーザーを作成します。
+4.  **ネットワークアクセス設定**:
+    *   左側のメニューから「Network Access」を選択します。
+    *   「Add IP Address」をクリックします。
+    *   「Allow Access From Anywhere」を選択し、`0.0.0.0/0` を追加してConfirmします。
+5.  **接続文字列の取得**:
+    *   左側のメニュー「Database」に戻り、作成したクラスターの「Connect」をクリックします。
+    *   「Drivers」を選択します。
+    *   表示された接続文字列（`mongodb+srv://...`）をコピーします。
+    *   コピーした文字列の `<password>` の部分を、ステップ3で作成したパスワードに置き換えます。
+
+---
+
+### ステップ2: FastAPI アプリケーションの準備
+
+1.  **`db.py` の修正**:
+    データベース接続文字列を環境変数から読み込むように変更します。
+
+    ```python
+    # db.py
+    from pymongo import MongoClient
+    import gridfs
+    import os
+
+    # Fly.ioのSecretに設定した環境変数 MONGO_URL を読み込む
+    MONGO_URL = os.environ.get("MONGO_URL")
+
+    client = MongoClient(MONGO_URL)
+    db = client["image_db"]
+    collection = db["images"]
+    fs = gridfs.GridFS(db)
+    ```
+
+2.  **`requirements.txt`への`gunicorn`の追加**:
+    `gunicorn`を`documents/requirements.txt`に追加します。
+
+3.  **Dockerfileの作成**:
+    プロジェクトのルートに以下の内容で`Dockerfile`を作成します。
+
+    ```Dockerfile
+    # Pythonの公式イメージをベースにする
+    FROM python:3.10-slim
+
+    # 作業ディレクトリを設定
+    WORKDIR /app
+
+    # 依存関係ファイルをコピー
+    COPY ./documents/requirements.txt .
+
+    # 依存関係をインストール
+    RUN pip install --no-cache-dir -r requirements.txt
+
+    # アプリケーションコードをコピー
+    COPY . .
+
+    # FastAPIが使用するポートを公開
+    EXPOSE 8000
+
+    # アプリケーションを起動
+    CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000", "main:app"]
+    ```
+
+4.  **`.dockerignore` ファイルの作成**:
+    プロジェクトのルートに以下の内容で`.dockerignore`を作成します。
+
+    ```
+    # Git
+    .git
+    .gitignore
+
+    # Docker
+    .dockerignore
+    Dockerfile
+
+    # Python
+    __pycache__/
+    *.pyc
+    *.pyo
+    *.pyd
+    .Python
+    .venv/
+    env/
+    venv/
+
+    # その他
+    .idea/
+    .vscode/
+    ```
+
+---
+
+### ステップ3: Fly.io へのデプロイ
+
+1.  **flyctlのインストールとログイン**:
+    ```bash
+    # 未インストールの場合
+    # curl -L https://fly.io/install.sh | sh
+    flyctl auth login
+    ```
+
+2.  **アプリケーションの初期化**:
+    プロジェクトのルートディレクトリで実行します。
+    ```bash
+    flyctl launch
+    ```
+    *   App Name: (任意の名前)
+    *   Region: (任意のリージョン)
+    *   PostgreSQL Database: N
+    *   Deploy now?: N
+
+3.  **MongoDB接続用Secretの設定**:
+    Atlasから取得した接続文字列全体をダブルクォーテーションで囲んで設定します。
+    ```bash
+    flyctl secrets set MONGO_URL="mongodb+srv://<your-username>:<your-password>@cluster0.xxxxx.mongodb.net/..."
+    ```
+
+4.  **デプロイの実行**:
+    ```bash
+    flyctl deploy
+    ```
+
+5.  **デプロイの確認とアクセス**:
+    ```bash
+    flyctl status
+    flyctl logs
+    flyctl open
+    ```

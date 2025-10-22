@@ -1,0 +1,158 @@
+https://mermaid.js.org
+
+#撮影者のシーケンス図　マーメイド形式
+
+sequenceDiagram
+    participant User as 撮影者(スマホ)
+    participant Front as フロントエンド(JS)
+    participant API as FastAPIサーバー
+    participant GridFS as MongoDB/GridFS
+    participant TEMP as TEMP_IMAGES(メモリ)
+    participant DB as imagesコレクション
+
+    User->>Front: 「新規撮影」ボタン押下
+    Front->>Front: UI切替（撮影ボタン等表示）
+
+    loop 最大10回まで
+        User->>Front: 「撮影」ボタン押下
+        Front->>Front: カメラ起動・画像選択
+        Front->>API: /photographer/temp_upload (画像, group_id, user_short_id)
+        API->>API: 画像トリミング・補正
+        API->>GridFS: 一時保存(temporary: true)
+        API->>TEMP: TEMP_IMAGESにファイル名追加
+        API->>Front: サムネイル(base64), filename返却
+        Front->>Front: サムネイル表示
+    end
+
+    User->>Front: 「取り消し」ボタン押下
+    Front->>API: /photographer/temp_delete (group_id, user_short_id)
+    API->>TEMP: TEMP_IMAGESから最後のファイル名削除
+    API->>GridFS: 該当ファイル削除
+    API->>Front: 削除完了通知
+    Front->>Front: サムネイル更新
+
+    User->>Front: 「撮影終了」ボタン押下
+    Front->>API: /photographer/finalize_upload (group_id, filenames[], user_short_id)
+    API->>TEMP: TEMP_IMAGESから該当ファイル名確認
+    API->>GridFS: temporary→falseに更新
+    API->>DB: imagesコレクションに本登録
+    API->>TEMP: TEMP_IMAGES[group_id]を空に
+    API->>Front: 登録完了通知
+    Front->>Front: UI初期化
+
+
+# 管理者のシーケンス図　マーメイド形式
+
+sequenceDiagram
+    participant Admin as 管理者(ブラウザ)
+    participant Front as 管理画面(HTML/JS)
+    participant API as FastAPIサーバー
+    participant DB as MongoDB(images, GridFS)
+    participant TEMP as TEMP_IMAGES(メモリ)
+
+    %% --- QRコード生成 ---
+    Admin->>Front: /admin/generate_qr アクセス
+    Front->>API: GET /admin/generate_qr
+    API->>Front: QR生成画面HTML返却
+
+    Admin->>Front: group_id入力し送信
+    Front->>API: POST /admin/generate_qr (group_id)
+    API->>API: QRコード生成
+    API->>Front: QR画像(base64)付きHTML返却
+
+    %% --- 仮登録リスト初期化 ---
+    Admin->>Front: /admin/force_reset アクセス
+    Front->>API: GET /admin/force_reset
+    API->>TEMP: TEMP_IMAGES全リセット
+    API->>Front: 初期化画面HTML返却
+
+    Admin->>Front: 「一時画像を全て削除」ボタン押下
+    Front->>API: POST /admin/force_reset
+    API->>DB: GridFSのtemporary:true画像を全削除
+    API->>TEMP: TEMP_IMAGES全クリア
+    API->>Front: 削除件数メッセージ返却
+
+    %% --- 画像検索・詳細表示 ---
+    Admin->>Front: /admin/search アクセス・検索条件入力
+    Front->>API: GET /admin/search?group_id=...&date=...
+    API->>DB: imagesコレクション検索
+    API->>DB: サムネイル用画像をGridFSから取得
+    API->>Front: 検索結果HTML返却
+
+    Admin->>Front: 検索結果から詳細リンククリック
+    Front->>API: GET /admin/detail/{item_id}
+    API->>DB: imagesコレクションから詳細取得
+    API->>DB: 画像をGridFSから取得
+    API->>Front: 詳細HTML返却
+
+    %% --- 登録画像の削除 ---
+    Admin->>Front: 詳細画面で「削除」ボタン押下
+    Front->>API: POST /admin/delete/{item_id}
+    API->>DB: 関連する画像をGridFSから削除
+    API->>DB: imagesコレクションから該当レコード削除
+    API->>Front: 検索画面へリダイレクト
+
+    %% --- グループ統計情報の表示 ---
+    Admin->>Front: /admin/statistics アクセス
+    Front->>API: GET /admin/statistics
+    API->>DB: imagesコレクションをaggregateして統計情報生成
+    API->>Front: 統計情報HTML返却
+
+    %% --- グループ一括削除 ---
+    Admin->>Front: 統計画面で「一括削除」ボタン押下
+    Front->>Front: 確認ダイアログ表示
+    Admin->>Front: 「OK」押下
+    Front->>API: POST /admin/delete_group/{group_id}
+    API->>DB: 関連する全画像をGridFSから削除
+    API->>DB: 関連する全レコードをimagesコレクションから削除
+    API->>Front: 削除完了メッセージ(JSON)返却
+    Front->>Front: 画面リロード
+
+
+# 外部接続のシーケンス図　マーメイド形式
+
+sequenceDiagram
+    participant Ext as 外部システム(n8n/FileMaker等)
+    participant API as FastAPIサーバー
+    participant DB as MongoDB(images, GridFS)
+
+    %% --- 画像取得 ---
+    Ext->>API: GET /external/images/{filename}
+    API->>DB: GridFSから画像検索
+    alt 画像あり
+        API->>Ext: 画像データ返却(image/jpeg)
+    else 画像なし
+        API->>Ext: 404エラー(JSON)
+    end
+
+    %% --- バーコード読取 ---
+    Ext->>API: POST /external/barcode (画像ファイル送信)
+    API->>API: 画像からバーコード解析
+    alt バーコード検出
+        API->>Ext: JSON(バーコード情報)
+    else 検出なし
+        API->>Ext: JSON(barcodes: [])
+    end
+
+    %% --- 未処理アイテム検索 ---
+    Ext->>API: GET /external/search_unuploaded_items?group_id=...
+    API->>DB: imagesコレクション検索(filemaker_uploaded: false)
+    API->>Ext: JSON(未処理アイテム一覧)
+
+    %% --- 処理済みマーク ---
+    Ext->>API: PATCH /external/mark_uploaded (group_id, filename)
+    API->>DB: images[].filemaker_uploadedをtrueに更新
+    alt 更新成功
+        API->>Ext: JSON(更新メッセージ)
+    else 対象なし
+        API->>Ext: 404エラー(JSON)
+    end
+
+    %% --- メタデータ更新 ---
+    Ext->>API: PATCH /external/update_metadata (_id, title等)
+    API->>DB: 指定_idのドキュメントを部分更新
+    alt 更新成功
+        API->>Ext: JSON(更新メッセージ)
+    else 対象なし/不正
+        API->>Ext: エラー(JSON)
+    end

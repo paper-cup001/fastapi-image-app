@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+pymongo
+pillow
+jinja2
+python-multipart
+websockets
+qrcode
+pyzbar
+pydantic[email]
+opencv-python-headless
+gunicorn
+passlib
+argon2-cffi
+python-jose[cryptography]
