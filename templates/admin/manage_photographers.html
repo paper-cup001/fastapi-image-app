@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>撮影者アカウント管理 - 管理者</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="container py-4">
+
+    <div class="mb-3">
+        <a href="/admin/dashboard" class="btn btn-secondary">← ダッシュボードに戻る</a>
+    </div>
+
+    <h2 class="mb-4">撮影者アカウント管理</h2>
+
+    <!-- Create Photographer Form -->
+    <div class="card mb-4">
+        <div class="card-header">新しい撮影者を作成</div>
+        <div class="card-body">
+            <form id="create-photographer-form">
+                <div class="row align-items-end">
+                    <div class="col-md-5">
+                        <label for="email" class="form-label">メールアドレス</label>
+                        <input type="email" class="form-control" id="email" required>
+                    </div>
+                    <div class="col-md-5">
+                        <label for="password" class="form-label">パスワード</label>
+                        <input type="password" class="form-control" id="password" required minlength="8">
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary w-100">作成</button>
+                    </div>
+                </div>
+            </form>
+            <div id="create-error" class="text-danger mt-2 d-none"></div>
+        </div>
+    </div>
+
+    <!-- Photographers List -->
+    <div class="card">
+        <div class="card-header">撮影者一覧</div>
+        <div class="card-body">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>メールアドレス</th>
+                        <th>作成日時</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="photographers-list">
+                    <!-- Data will be populated by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const photographersList = document.getElementById('photographers-list');
+    const createForm = document.getElementById('create-photographer-form');
+    const createErrorDiv = document.getElementById('create-error');
+
+    // Fetch and display all photographers
+    async function fetchPhotographers() {
+        try {
+            const response = await fetch('/admin/api/photographers');
+            if (!response.ok) {
+                throw new Error('Failed to fetch photographers');
+            }
+            const photographers = await response.json();
+            renderPhotographers(photographers);
+        } catch (error) {
+            console.error('Error:', error);
+            photographersList.innerHTML = `<tr><td colspan="3" class="text-danger">一覧の読み込みに失敗しました。</td></tr>`;
+        }
+    }
+
+    // Render photographers in the table
+    function renderPhotographers(photographers) {
+        photographersList.innerHTML = '';
+        if (photographers.length === 0) {
+            photographersList.innerHTML = `<tr><td colspan="3">登録されている撮影者はいません。</td></tr>`;
+            return;
+        }
+        photographers.forEach(user => {
+            const row = document.createElement('tr');
+            row.setAttribute('data-user-id', user._id);
+            row.innerHTML = `
+                <td>${user.email}</td>
+                <td>${new Date(user.created_at).toLocaleString()}</td>
+                <td>
+                    <button class="btn btn-danger btn-sm delete-btn">削除</button>
+                </td>
+            `;
+            photographersList.appendChild(row);
+        });
+    }
+
+    // Handle form submission for creating a new photographer
+    createForm.addEventListener('submit', async function(event) {
+        event.preventDefault();
+        createErrorDiv.classList.add('d-none');
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+
+        try {
+            const response = await fetch('/admin/api/photographers', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    email: email, 
+                    password: password,
+                    role: 'photographer' // Hardcode the role
+                }),
+            });
+
+            if (response.status === 201) {
+                createForm.reset();
+                fetchPhotographers(); // Refresh the list
+            } else {
+                const errorData = await response.json();
+                createErrorDiv.textContent = errorData.detail || '作成に失敗しました。';
+                createErrorDiv.classList.remove('d-none');
+            }
+        } catch (error) {
+            createErrorDiv.textContent = 'サーバーとの通信エラー';
+            createErrorDiv.classList.remove('d-none');
+        }
+    });
+
+    // Handle delete button clicks
+    photographersList.addEventListener('click', async function(event) {
+        if (event.target.classList.contains('delete-btn')) {
+            const row = event.target.closest('tr');
+            const userId = row.dataset.userId;
+            
+            if (confirm(`メールアドレス ${row.cells[0].textContent} の撮影者を本当に削除しますか？`)) {
+                try {
+                    const response = await fetch(`/admin/api/photographers/${userId}`, {
+                        method: 'DELETE',
+                    });
+
+                    if (response.status === 204) {
+                        row.remove(); // Remove from UI
+                    } else {
+                        const errorData = await response.json();
+                        alert(errorData.detail || '削除に失敗しました。');
+                    }
+                } catch (error) {
+                    alert('サーバーとの通信エラー');
+                }
+            }
+        }
+    });
+
+    // Initial fetch
+    fetchPhotographers();
+});
+</script>
+</body>
+</html>
