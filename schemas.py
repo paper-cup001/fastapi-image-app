@@ -9,6 +9,10 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
+class TokenWithRole(Token):
+    """ユーザーの役割(role)を含むトークンスキーマ"""
+    role: str
+
 class TokenData(BaseModel):
     """アクセストークン内に保持するデータのスキーマ"""
     email: Optional[EmailStr] = None

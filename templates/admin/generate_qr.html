@@ -28,6 +28,11 @@
         <h2 class="h5 mb-3">QRコード</h2>
         <img src="data:image/png;base64,{{ qr_code }}" alt="QR Code">
         <p class="mt-2 small text-muted">スマホのカメラで読み込んでください</p>
+        
+        <div class="mt-3">
+            <label for="qr-url" class="form-label">または、以下のURLをコピーしてください:</label>
+            <input type="text" id="qr-url" class="form-control" value="{{ url }}" readonly onclick="this.select();">
+        </div>
     </div>
     {% endif %}
 

@@ -32,7 +32,6 @@
       <label for="group_id_input" class="font-weight-bold">グループID:</label>
       <input type="text" id="group_id_input" class="form-control">
     </div>
-    <span id="uuid-display" class="text-muted"></span>
   </div>
   
   <!-- 品質・コメント選択（アコーディオン1つに統合） -->
@@ -133,16 +132,6 @@
   <script>
     $(document).ready(function(){
 
-      function generateShortID() {
-        return Math.random().toString(36).substr(2, 8);
-      }
-
-      var userShortID = localStorage.getItem('user_short_id');
-      if (!userShortID) {
-        userShortID = generateShortID();
-        localStorage.setItem('user_short_id', userShortID);
-      }
-      $('#uuid-display').text('あなたの端末ID: ' + userShortID);
 
       function getQueryParam(name) {
           name = name.replace(/[[\\]]/, "\\\[").replace(/[[\\]]/, "\\\]");
@@ -179,14 +168,7 @@
         $.getJSON('/photographer/temp_list', { group_id: groupId }, function (data) {
           var tempFiles = data.files || [];
           var isTempEmpty = tempFiles.length === 0;
-          var hasMyFile = false;
-          for (var i = 0; i < tempFiles.length; i++) {
-              if (tempFiles[i].indexOf(userShortID) > -1) {
-                  hasMyFile = true;
-                  break;
-              }
-          }
-          if (isTempEmpty || !hasMyFile) {
+          if (tempFiles.length === 0) {
             alert('⚠️ 管理者により画像が削除されました。初期画面に戻ります。');
             thumbnails = [];
             updateThumbnails();
@@ -225,7 +207,6 @@
         var formData = new FormData();
         formData.append('file', fileOrBlob, filename);
         formData.append('group_id', groupId);
-        formData.append('user_short_id', userShortID);
         formData.append('source_page', 'upload_old');
 
         $.ajax({
@@ -260,7 +241,7 @@
           url: '/photographer/temp_delete',
           type: 'POST',
           contentType: 'application/json',
-          data: JSON.stringify({ group_id: groupId, user_short_id: userShortID }),
+          data: JSON.stringify({ group_id: groupId }),
           success: function (res) {
             thumbnails.pop();
             updateThumbnails();
@@ -296,7 +277,6 @@
           data: JSON.stringify({
             group_id: groupId,
             filenames: filenames,
-            user_short_id: userShortID,
             quality: $('#quality').val(),
             comment: comments
           }),
@@ -336,23 +316,6 @@
         }
       }
 
-      window.addEventListener('beforeunload', function () {
-        if (thumbnails.length > 0) {
-          var filenames = [];
-          for(var i=0; i<thumbnails.length; i++) {
-              filenames.push(thumbnails[i].filename);
-          }
-          $.ajax({
-              url: '/photographer/temp_delete',
-              type: 'POST',
-              contentType: 'application/json',
-              data: JSON.stringify({ group_id: groupId, filenames: filenames }),
-              async: false,
-              success: function() { /* Do nothing */ },
-              error: function() { /* Do nothing */ }
-          });
-        }
-      });
     });
   </script>
 </body>

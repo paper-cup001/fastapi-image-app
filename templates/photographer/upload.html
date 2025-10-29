@@ -49,7 +49,6 @@
   <div>
     <span id="group-id-display" class="fw-bold"></span>
     <span id="resolution-display" class="text-info ms-3"></span><br />
-    <span id="uuid-display" class="text-muted"></span>
     <div class="form-check form-check-inline ms-3">
       <input class="form-check-input" type="checkbox" id="fast-mode" value="fast">
       <label class="form-check-label" for="fast-mode">はやい</label>
@@ -153,16 +152,6 @@
   <script>
     $(document).ready(function() {
 
-    function generateShortID() {
-      return Math.random().toString(36).substr(2, 8);
-    }
-
-    let userShortID = localStorage.getItem('user_short_id');
-    if (!userShortID) {
-      userShortID = generateShortID();
-      localStorage.setItem('user_short_id', userShortID);
-    }
-    $('#uuid-display').text('あなたの端末ID: ' + userShortID);
 
     function getQueryParam(name) {
       const url = new URL(window.location.href);
@@ -193,11 +182,7 @@
       // temp_imagesのファイル一覧取得
       $.getJSON('/photographer/temp_list', { group_id: groupId }, function (data) { // temp_files -> temp_list
         const tempFiles = data.files || [];
-        // 条件2A: temp_imagesが空
-        const isTempEmpty = tempFiles.length === 0;
-        // 条件2B: temp_imagesに自分の端末IDを含むファイルがない
-        const hasMyFile = tempFiles.some(f => f.includes(userShortID));
-        if (isTempEmpty || !hasMyFile) {
+        if (tempFiles.length === 0) {
           // 管理者による削除とみなして初期画面に戻す
           alert('⚠️ 管理者により画像が削除されました。初期画面に戻ります。');
           thumbnails = [];
@@ -251,16 +236,9 @@
 
           console.log('img.onload fired.');
 
-          const quality = $('#fast-mode').is(':checked') ? 'normal' : 'large';
-          let MAX_PIXELS;
-          if (quality === 'fast') {
-            MAX_PIXELS = 1200;
-          } else if (quality === 'normal') {
-            MAX_PIXELS = 1800;
-          } else {
-            MAX_PIXELS = 2400;
-          }
-          console.log(`Quality set to: ${quality}, MAX_PIXELS: ${MAX_PIXELS}`);
+          const isFastMode = $('#fast-mode').is(':checked');
+          const MAX_PIXELS = isFastMode ? 1200 : 1800; // Fast: 1200px, Normal: 1800px
+          console.log(`Mode: ${isFastMode ? 'Fast' : 'Normal'}, MAX_PIXELS: ${MAX_PIXELS}`);
 
           let newWidth = img.width;
           let newHeight = img.height;
@@ -311,7 +289,7 @@
 
             const postDetectStartTime = performance.now(); // Start post-detection JS logic timer
 
-            const validQrCodes = ["F1", "F2", "F3", "B1", "B2", "B3"];
+            const validQrCodes = ["L1", "L2", "L3", "R1", "R2", "R3"];
             const dMarkerInt = {};
 
             for (let i = 0; i < decodedInfo.size(); ++i) {
@@ -441,11 +419,11 @@
               cv.imshow(canvas, croppedImage);
               $('#resolution-display').text(`${croppedImage.cols}x${croppedImage.rows}`);
               canvas.toBlob(function(blob) {
-                const croppedFile = new File([blob], file.name, { type: 'image/jpeg' });
+                const croppedFile = new File([blob], file.name, { type: 'image/png' });
                 uploadImage(croppedFile);
                 const imshowBlobEndTime = performance.now(); // End imshow/blob timer (inside async callback)
                 console.log('cv.imshow and canvas.toBlob time:', (imshowBlobEndTime - imshowBlobStartTime).toFixed(2), 'ms');
-              }, 'image/jpeg');
+              }, 'image/png');
 
               croppedImage.delete();
             } else {
@@ -475,7 +453,6 @@
       const formData = new FormData();
       formData.append('file', fileToUpload);
       formData.append('group_id', groupId);
-      formData.append('user_short_id', userShortID);
 
       $.ajax({
         url: '/photographer/temp_upload',
@@ -509,7 +486,7 @@
         url: '/photographer/temp_delete',
         type: 'POST',
         contentType: 'application/json',
-        data: JSON.stringify({ group_id: groupId, user_short_id: userShortID }),
+        data: JSON.stringify({ group_id: groupId }),
         success: function (res) {
           thumbnails.pop();
           updateThumbnails();
@@ -541,7 +518,6 @@
         data: JSON.stringify({
           group_id: groupId,
           filenames: thumbnails.map(t => t.filename),
-          user_short_id: userShortID,
           quality: $('#quality').val(),
           comment: comments
         }),
@@ -579,14 +555,6 @@
       });
     }
 
-    window.addEventListener('beforeunload', function () {
-      if (thumbnails.length > 0) {
-        navigator.sendBeacon(
-          '/photographer/temp_delete',
-          JSON.stringify({ group_id: groupId, filenames: thumbnails.map(t => t.filename) })
-        );
-      }
-    });
     }); // End of $(document).ready()
   </script>
 </body>

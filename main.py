@@ -14,6 +14,12 @@ app = FastAPI()  # ← この行がないとエラーになる（エントリー
 # ★ 未ログイン例外のハンドラを登録
 @app.exception_handler(NotLoggedInException)
 async def not_logged_in_exception_handler(request: Request, exc: NotLoggedInException):
+    # アクセスしようとしたパスに応じて、適切なログインページにリダイレクトする
+    if request.url.path.startswith("/admin"):
+        return RedirectResponse(url="/login")
+    elif request.url.path.startswith("/photographer"):
+        return RedirectResponse(url="/photographer/login")
+    # デフォルトのフォールバック
     return RedirectResponse(url="/login")
 
 
@@ -63,8 +69,4 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 
-# これはopencv.jsが利用できない端末のためのupload_old.html
-@app.get("/photographer/upload_old.html", response_class=HTMLResponse)
-def upload_test(request: Request):
-    return templates.TemplateResponse("photographer/upload_old.html", {"request": request})
 

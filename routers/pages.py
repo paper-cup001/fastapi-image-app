@@ -13,3 +13,19 @@ async def login_page(request: Request):
     運営者ログインページを返す。
     """
     return templates.TemplateResponse("login.html", {"request": request})
+
+
+@router.get("/photographer/login", response_class=HTMLResponse)
+async def photographer_login_page(request: Request):
+    """
+    撮影者ログインページを返す。
+    """
+    return templates.TemplateResponse("photographer/login.html", {"request": request})
+
+
+@router.get("/photographer/scan_qr", response_class=HTMLResponse)
+async def photographer_scan_qr_page(request: Request):
+    """
+    撮影者がログイン後に表示するQRコードスキャン待機ページを返す。
+    """
+    return templates.TemplateResponse("photographer/scan_qr.html", {"request": request})
