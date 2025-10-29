@@ -1,263 +1,128 @@
-# API仕様書　2025/06/27作成
+# API仕様書
+
+**最終更新日: 2025/10/29**
 
 ---
 
-## 撮影者向けエンドポイント `/photographer`
+## 認証
 
-### 1. 画像一時アップロード
+本APIのほとんどのエンドポイントは、認証を必要とします。
+クライアントは `/token` エンドポイントで取得したJWTを、以降のリクエストでHTTPOnlyクッキー (`access_token`) に含めて送信する必要があります。
+
+### 1. 認証トークン取得
+- **POST** `/token`
+- **説明**: ユーザー名（メールアドレス）とパスワードで認証し、アクセストークンを生成して返す。トークンはHTTPOnlyのクッキーにもセットされる。
+- **リクエスト (application/x-www-form-urlencoded)**:
+    - `username`: string (メールアドレス)
+    - `password`: string
+- **レスポンス例**:
+    ```json
+    {
+      "access_token": "ey...",
+      "token_type": "bearer",
+      "role": "operator" // or "photographer"
+    }
+    ```
+
+### 2. ログアウト
+- **POST** `/logout`
+- **説明**: ユーザーをログアウトさせる。HTTPOnlyの`access_token`クッキーを削除する。
+- **リクエストボディ**: なし
+- **レスポンス例**:
+    ```json
+    {"message": "Logout successful"}
+    ```
+
+---
+
+## 撮影者・運営者共通エンドポイント `/photographer`
+
+**【権限】: `photographer` または `operator`**
+
+### 3. ログインユーザー情報取得
+- **GET** `/photographer/users/me`
+- **説明**: 現在ログインしている撮影者または運営者のユーザー情報を返す。
+- **レスポンス例**:
+    ```json
+    {
+        "id": "...",
+        "email": "user@example.com",
+        "role": "photographer",
+        "is_active": true
+    }
+    ```
+
+### 4. 画像一時アップロード
 - **POST** `/photographer/temp_upload`
-- **説明**: 画像を一時保存し、サムネイルを返す
+- **説明**: 画像を一時保存し、サムネイルを返す。認証トークンからユーザーIDを特定する。
 - **リクエスト (multipart/form-data)**:
     - `file`: 画像ファイル
     - `group_id`: string
-    - `user_short_id`: string（任意）
 - **レスポンス例**:
     ```json
     {
       "thumbnail": "<base64 string>",
-      "filename": "groupid_userid_yyyymmddhhmmssfff.jpg",
-      "user_short_id": "xxx"
+      "filename": "groupid_userid_yyyymmddhhmmssfff.png"
     }
     ```
 
----
-
-### 2. 一時画像削除
+### 5. 一時画像削除
 - **POST** `/photographer/temp_delete`
-- **説明**: 一時保存画像（最後に追加したもの）を削除
+- **説明**: ログインユーザーが直近で一時保存した画像を1枚削除する。
 - **リクエスト (application/json)**:
     - `group_id`: string
-    - `user_short_id`: string（任意）
 - **レスポンス例**:
     ```json
-    {
-      "deleted": "filename.jpg"
-    }
-    ```
-    - エラー時:  
-    ```json
-    {
-      "error": "削除対象の画像がありません"
-    }
+    {"deleted": "filename.png"}
     ```
 
----
-
-### 3. アップロード確定
+### 6. アップロード確定
 - **POST** `/photographer/finalize_upload`
-- **説明**: 一時保存画像を本登録
+- **説明**: 一時保存画像を本登録する。
 - **リクエスト (application/json)**:
     - `group_id`: string
     - `filenames`: string配列
-    - `user_short_id`: string
+    - `quality`: string
+    - `comment`: string配列
 - **レスポンス例**:
     ```json
-    {
-      "success": true
-    }
-    ```
-    - エラー時:  
-    ```json
-    {
-      "success": false,
-      "message": "画像がありません（管理者による削除の可能性）"
-    }
-    ```
-
----
-
-### 4. 一時画像全削除
-- **POST** `/photographer/delete_all_temp_files`
-- **説明**: TEMP_IMAGESの全グループを空にする
-- **レスポンス例**:
-    ```json
-    {
-      "success": true
-    }
+    {"success": true}
     ```
 
 ---
 
 ## 管理者向けエンドポイント `/admin`
 
-### 5. QRコード生成画面
-- **GET** `/admin/generate_qr`
-- **説明**: QRコード生成画面を表示
-- **レスポンス**: HTML
+**【権限】: `operator`**
 
-### 6. QRコード生成
-- **POST** `/admin/generate_qr`
-- **説明**: group_idからQRコード画像を生成
-- **リクエスト (application/x-www-form-urlencoded)**:
-    - `group_id`: string
-- **レスポンス**: HTML（QR画像埋め込み）
+### 7. ログインユーザー情報取得 (管理者)
+- **GET** `/admin/users/me`
+- **説明**: 現在ログインしている運営者のユーザー情報を返す。
+- **レスポンス**: `/photographer/users/me` と同様。
 
----
+### 8. 撮影者アカウント管理
+- **GET** `/admin/manage-photographers`: 管理ページ(HTML)を返す。
+- **GET** `/admin/photographers`: 撮影者一覧(JSON)を返す。
+- **POST** `/admin/photographers`: 新規撮影者を作成する。
+- **DELETE** `/admin/photographers/{user_id}`: 撮影者を削除する。
 
-### 7. 仮登録リスト初期化画面
-- **GET** `/admin/force_reset`
-- **説明**: TEMP_IMAGESを初期化
-- **レスポンス**: HTML
+### 9. QRコード生成
+- **GET** `/admin/generate_qr`: 生成ページ(HTML)を返す。
+- **POST** `/admin/generate_qr`: QRコードを生成してHTML内に表示する。
 
-### 8. 仮登録リスト初期化実行
-- **POST** `/admin/force_reset`
-- **説明**: GridFSのtemporary:true画像を全削除し、TEMP_IMAGESもクリア
-- **レスポンス**: HTML（削除件数メッセージ）
+### 10. その他管理機能
+- `/admin/search`: 登録画像一覧ページ(HTML)
+- `/admin/detail/{item_id}`: 画像詳細ページ(HTML)
+- `/admin/delete/{item_id}`: 画像削除処理
+- `/admin/statistics`: 統計情報ページ(HTML)
+- `/admin/force_reset`: 仮登録データ初期化ページ(HTML)と初期化処理
 
----
-
-### 9. 画像検索
-- **GET** `/admin/search`
-- **説明**: 画像をgroup_idや日付で検索
-- **クエリパラメータ**:
-    - `group_id`: string（任意）
-    - `date`: string（任意, 例: 20240627）
-- **レスポンス**: HTML（検索結果）
+(※管理者向けエンドポイントの詳細は、実装に合わせて要追記)
 
 ---
 
-### 10. 画像詳細取得
-- **GET** `/admin/detail/{item_id}`
-- **説明**: 画像詳細を表示
-- **レスポンス**: HTML
+## 外部システム向けエンドポイント `/external_api`
 
----
+（変更なし）
 
-### 11. 登録画像削除
-- **POST** `/admin/delete/{item_id}`
-- **説明**: 指定IDの画像を削除
-- **レスポンス**: 検索画面へリダイレクト
-
----
-
-### 12. グループ統計情報取得
-- **GET** `/admin/statistics`
-- **説明**: グループごとの統計情報を表示
-- **レスポンス**: HTML
-
----
-
-### 13. グループ一括削除
-- **POST** `/admin/delete_group/{group_id}`
-- **説明**: 指定したグループIDの画像とデータをすべて削除
-- **レスポンス**: JSON (削除結果メッセージ)
-
----
-
-### 14. 一時画像一覧取得
-- **GET** `/admin/temp_files`
-- **説明**: temporary:trueなGridFS画像一覧
-- **レスポンス例**:
-    ```json
-    {
-      "files": [
-        {"filename": "xxx.jpg"},
-        ...
-      ]
-    }
-    ```
-
----
-
-## 外部システム向けエンドポイント `/external_api`（または `/n8n`）
-
-### 15. 未処理アイテム検索
-- **GET** `/external_api/search_unuploaded_items`
-- **説明**: group_idごとの未アップロードアイテム一覧
-- **クエリパラメータ**:
-    - `group_id`: string
-- **レスポンス例**:
-    ```json
-    {
-      "items": [
-        {
-          "_id": "xxxx",
-          "group_id": "xxx",
-          "user_short_id": "xxx",
-          "title": "",
-          "images": [
-            {"filename": "xxx.jpg", "file_id": "..."}
-          ],
-          "db_uploaded": false
-        }
-      ]
-    }
-    ```
-
----
-
-### 16. 画像取得
-- **GET** `/external_api/images/{filename}`
-- **説明**: GridFSから画像データを取得
-- **レスポンス**: image/jpeg（バイナリ）
-
----
-
-### 17. 処理済みマーク
-- **PATCH** `/external_api/mark_uploaded`
-- **説明**: 指定アイテムのdb_uploadedをtrueに
-- **リクエスト (application/json)**:
-    - `_id`: string
-- **レスポンス例**:
-    ```json
-    {
-      "message": "更新しました",
-      "_id": "xxxx"
-    }
-    ```
-
----
-
-### 18. バーコード読取
-- **POST** `/external_api/barcode`
-- **説明**: 画像ファイルからバーコードを解析
-- **リクエスト (multipart/form-data)**:
-    - `file`: 画像ファイル
-- **レスポンス例**:
-    ```json
-    {
-      "barcodes": [
-        {
-          "type": "EAN13",
-          "data": "4901234567894",
-          "rect": { ... }
-        }
-      ]
-    }
-    ```
-
----
-
-### 19. メタデータ更新
-- **PATCH** `/external_api/update_metadata`
-- **説明**: 指定_idのドキュメントのメタデータを部分更新
-- **リクエスト (application/json)**:
-    - `_id`: string
-    - `title`, `platform`, `description`, `jan_code`, `status`, `meta_added`（任意）
-- **レスポンス例**:
-    ```json
-    {
-      "message": "更新しました",
-      "_id": "xxxx",
-      "updated_fields": ["title", "platform"]
-    }
-    ```
-
----
-
-## 備考
-- 認証や権限管理は未記載です。必要に応じて追加してください。
-- レスポンス例やエラー時の挙動は実装により異なる場合があります。
-- HTMLレスポンスのエンドポイントは管理画面用です。
----
-### ログアウト
-
-- **エンドポイント:** `/logout`
-- **メソッド:** `POST`
-- **説明:** ユーザーをログアウトさせる。HTTPOnlyの`access_token`クッキーを削除する。
-- **リクエストボディ:** なし
-- **成功レスポンス:**
-    - **コード:** `200 OK`
-    - **内容:** `{"message": "Logout successful"}`
-- **失敗レスポンス:** なし
 ---

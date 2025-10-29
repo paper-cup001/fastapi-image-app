@@ -55,7 +55,7 @@
                     const data = await response.json();
                     // Redirect based on the user's role
                     if (data.role === 'operator') {
-                        window.location.href = '/admin/search';
+                        window.location.href = '/admin/dashboard';
                     } else if (data.role === 'photographer') {
                         window.location.href = '/photographer/scan_qr';
                     } else {

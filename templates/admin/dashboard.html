@@ -7,13 +7,11 @@
 </head>
 <body class="container py-4">
     <header class="pb-3 mb-4 border-bottom">
-        <div class="d-flex align-items-center justify-content-between">
-            <a href="/admin/dashboard" class="text-dark text-decoration-none">
-                <span class="fs-4">管理者ダッシュボード</span>
-            </a>
-            <div id="user-info">
-                <!-- ユーザー情報がここに表示されます -->
-            </div>
+        <a href="/admin/dashboard" class="text-dark text-decoration-none">
+            <span class="fs-4">管理者ダッシュボード</span>
+        </a>
+        <div id="user-info" class="mt-2">
+            <!-- ユーザー情報がここに表示されます -->
         </div>
     </header>
 
@@ -21,7 +19,7 @@
         <h1 class="mb-4">👤 操作を選択してください</h1>
         <div class="d-grid gap-3 col-12 col-lg-6 mx-auto">
             <a href="/admin/manage-photographers" class="btn btn-outline-success">撮影者アカウント管理</a>
-            <a href="/admin/generate_qr" class="btn btn-outline-primary">QRコード生成</a>
+            <a href="/admin/generate_qr" class="btn btn-outline-primary">撮影用URL/QRコード作成</a>
             <a href="/admin/search" class="btn btn-outline-secondary">MongoDB 登録画像一覧</a>
             <a href="/admin/statistics" class="btn btn-outline-info">グループID毎の統計情報</a>
             <a href="/admin/force_reset" class="btn btn-outline-danger">仮登録リストの初期化</a>

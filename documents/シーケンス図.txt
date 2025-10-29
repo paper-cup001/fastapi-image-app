@@ -1,14 +1,54 @@
-https://mermaid.js.org
+## ログイン・ログアウト (共通)
 
-#撮影者のシーケンス図　マーメイド形式
+```mermaid
+sequenceDiagram
+    participant User as ユーザー(ブラウザ)
+    participant Front as ログイン画面(HTML/JS)
+    participant API as FastAPIサーバー
 
+    User->>Front: メールアドレス・パスワード入力し「ログイン」
+    Front->>API: POST /token (username, password)
+    API->>API: パスワード検証
+    alt 認証成功
+        API->>API: JWT生成
+        API->>Front: access_token, role 返却 (Cookieにもセット)
+        Front->>Front: roleに応じてリダイレクト先を決定
+        alt role is operator
+            Front->>User: /admin/dashboard へ遷移
+        else role is photographer
+            Front->>User: /photographer/scan_qr へ遷移
+        end
+    else 認証失敗
+        API->>Front: 401 Unauthorized
+        Front->>User: エラーメッセージ表示
+    end
+
+    User->>Front: 「ログアウト」ボタン押下
+    Front->>API: POST /logout
+    API->>Front: Cookie削除レスポンス
+    Front->>User: ログインページへ遷移
+end
+```
+
+---
+
+## 撮影者のシーケンス図
+
+```mermaid
 sequenceDiagram
     participant User as 撮影者(スマホ)
     participant Front as フロントエンド(JS)
     participant API as FastAPIサーバー
     participant GridFS as MongoDB/GridFS
-    participant TEMP as TEMP_IMAGES(メモリ)
     participant DB as imagesコレクション
+
+    User->>Front: QRコード読み取り or URL直アクセス
+    Front->>API: GET /photographer/upload.html
+    API->>Front: 撮影ページHTML返却
+
+    Front->>API: GET /photographer/users/me (Cookie認証)
+    API->>Front: ユーザー情報(JSON)返却
+    Front->>Front: ユーザー名表示
 
     User->>Front: 「新規撮影」ボタン押下
     Front->>Front: UI切替（撮影ボタン等表示）
@@ -16,108 +56,98 @@ sequenceDiagram
     loop 最大10回まで
         User->>Front: 「撮影」ボタン押下
         Front->>Front: カメラ起動・画像選択
-        Front->>API: /photographer/temp_upload (画像, group_id, user_short_id)
-        API->>API: 画像トリミング・補正
-        API->>GridFS: 一時保存(temporary: true)
-        API->>TEMP: TEMP_IMAGESにファイル名追加
+        Front->>API: POST /photographer/temp_upload (画像, group_id) (Cookie認証)
+        API->>API: 画像処理
+        API->>GridFS: 一時保存(temporary: true, photographer_id)
         API->>Front: サムネイル(base64), filename返却
         Front->>Front: サムネイル表示
     end
 
     User->>Front: 「取り消し」ボタン押下
-    Front->>API: /photographer/temp_delete (group_id, user_short_id)
-    API->>TEMP: TEMP_IMAGESから最後のファイル名削除
-    API->>GridFS: 該当ファイル削除
+    Front->>API: POST /photographer/temp_delete (group_id) (Cookie認証)
+    API->>GridFS: 該当ユーザーの直近一時ファイルを削除
     API->>Front: 削除完了通知
     Front->>Front: サムネイル更新
 
     User->>Front: 「撮影終了」ボタン押下
-    Front->>API: /photographer/finalize_upload (group_id, filenames[], user_short_id)
-    API->>TEMP: TEMP_IMAGESから該当ファイル名確認
+    Front->>API: POST /photographer/finalize_upload (group_id, filenames[], quality, comment) (Cookie認証)
     API->>GridFS: temporary→falseに更新
     API->>DB: imagesコレクションに本登録
-    API->>TEMP: TEMP_IMAGES[group_id]を空に
     API->>Front: 登録完了通知
     Front->>Front: UI初期化
+end
+```
 
+---
 
-# 管理者のシーケンス図　マーメイド形式
+## 管理者のシーケンス図
 
+```mermaid
 sequenceDiagram
     participant Admin as 管理者(ブラウザ)
     participant Front as 管理画面(HTML/JS)
     participant API as FastAPIサーバー
     participant DB as MongoDB(images, GridFS)
-    participant TEMP as TEMP_IMAGES(メモリ)
 
-    %% --- QRコード生成 ---
-    Admin->>Front: /admin/generate_qr アクセス
+    %% --- ログイン後のダッシュボード表示 ---
+    Admin->>Front: /admin/dashboard アクセス
+    Front->>API: GET /admin/dashboard (Cookie認証)
+    API->>Front: ダッシュボードHTML返却
+    Front->>API: GET /admin/users/me (Cookie認証)
+    API->>Front: ユーザー情報(JSON)返却
+    Front->>Front: ユーザー名表示
+
+    %% --- 撮影用URL/QRコード作成 ---
+    Admin->>Front: 「撮影用URL/QRコード作成」ボタン押下
     Front->>API: GET /admin/generate_qr
     API->>Front: QR生成画面HTML返却
 
-    Admin->>Front: group_id入力し送信
+    Admin->>Front: group_id入力し「URL/QRコード作成」押下
     Front->>API: POST /admin/generate_qr (group_id)
     API->>API: QRコード生成
     API->>Front: QR画像(base64)付きHTML返却
 
-    %% --- 仮登録リスト初期化 ---
-    Admin->>Front: /admin/force_reset アクセス
-    Front->>API: GET /admin/force_reset
-    API->>TEMP: TEMP_IMAGES全リセット
-    API->>Front: 初期化画面HTML返却
+    %% --- 運営者自身による撮影 ---
+    Admin->>Front: 「今すぐ写真撮影」ボタン押下
+    Front->>User: /photographer/upload.html?group_id=... へ遷移
+    Note right of User: 以降は撮影者のシーケンス図に合流
 
-    Admin->>Front: 「一時画像を全て削除」ボタン押下
-    Front->>API: POST /admin/force_reset
-    API->>DB: GridFSのtemporary:true画像を全削除
-    API->>TEMP: TEMP_IMAGES全クリア
-    API->>Front: 削除件数メッセージ返却
+    %% --- 撮影者アカウント管理 ---
+    Admin->>Front: 「撮影者アカウント管理」ボタン押下
+    Front->>API: GET /admin/manage-photographers
+    API->>Front: 管理ページHTML返却
+    Front->>API: GET /admin/photographers
+    API->>DB: usersコレクション検索 (role: photographer)
+    API->>Front: 撮影者リスト(JSON)返却
+    Front->>Front: 一覧表示
 
-    %% --- 画像検索・詳細表示 ---
-    Admin->>Front: /admin/search アクセス・検索条件入力
-    Front->>API: GET /admin/search?group_id=...&date=...
-    API->>DB: imagesコレクション検索
-    API->>DB: サムネイル用画像をGridFSから取得
-    API->>Front: 検索結果HTML返却
+    Admin->>Front: 新規作成 or 削除
+    Front->>API: POST or DELETE /admin/photographers
+    API->>DB: usersコレクションを更新
+    API->>Front: 結果(JSON)返却
+    Front->>Front: 画面更新
 
-    Admin->>Front: 検索結果から詳細リンククリック
-    Front->>API: GET /admin/detail/{item_id}
-    API->>DB: imagesコレクションから詳細取得
-    API->>DB: 画像をGridFSから取得
-    API->>Front: 詳細HTML返却
+    %% --- その他（検索、統計など）---
+    Note over Admin, DB: 検索、詳細表示、削除、統計表示などのフローは、
+    Note over Admin, DB: すべて認証(Cookie)を伴うAPIリクエストを介して行われる。
+    Note over Admin, DB: (詳細は旧シーケンス図参照)
+end
+```
 
-    %% --- 登録画像の削除 ---
-    Admin->>Front: 詳細画面で「削除」ボタン押下
-    Front->>API: POST /admin/delete/{item_id}
-    API->>DB: 関連する画像をGridFSから削除
-    API->>DB: imagesコレクションから該当レコード削除
-    API->>Front: 検索画面へリダイレクト
+---
 
-    %% --- グループ統計情報の表示 ---
-    Admin->>Front: /admin/statistics アクセス
-    Front->>API: GET /admin/statistics
-    API->>DB: imagesコレクションをaggregateして統計情報生成
-    API->>Front: 統計情報HTML返却
+## 外部接続のシーケンス図
 
-    %% --- グループ一括削除 ---
-    Admin->>Front: 統計画面で「一括削除」ボタン押下
-    Front->>Front: 確認ダイアログ表示
-    Admin->>Front: 「OK」押下
-    Front->>API: POST /admin/delete_group/{group_id}
-    API->>DB: 関連する全画像をGridFSから削除
-    API->>DB: 関連する全レコードをimagesコレクションから削除
-    API->>Front: 削除完了メッセージ(JSON)返却
-    Front->>Front: 画面リロード
+（変更なし）
 
-
-# 外部接続のシーケンス図　マーメイド形式
-
+```mermaid
 sequenceDiagram
     participant Ext as 外部システム(n8n/FileMaker等)
     participant API as FastAPIサーバー
     participant DB as MongoDB(images, GridFS)
 
     %% --- 画像取得 ---
-    Ext->>API: GET /external/images/{filename}
+    Ext->>API: GET /external_api/images/{filename}
     API->>DB: GridFSから画像検索
     alt 画像あり
         API->>Ext: 画像データ返却(image/jpeg)
@@ -126,7 +156,7 @@ sequenceDiagram
     end
 
     %% --- バーコード読取 ---
-    Ext->>API: POST /external/barcode (画像ファイル送信)
+    Ext->>API: POST /external_api/barcode (画像ファイル送信)
     API->>API: 画像からバーコード解析
     alt バーコード検出
         API->>Ext: JSON(バーコード情報)
@@ -135,13 +165,13 @@ sequenceDiagram
     end
 
     %% --- 未処理アイテム検索 ---
-    Ext->>API: GET /external/search_unuploaded_items?group_id=...
-    API->>DB: imagesコレクション検索(filemaker_uploaded: false)
+    Ext->>API: GET /external_api/search_unuploaded_items?group_id=...
+    API->>DB: imagesコレクション検索(db_uploaded: false)
     API->>Ext: JSON(未処理アイテム一覧)
 
     %% --- 処理済みマーク ---
-    Ext->>API: PATCH /external/mark_uploaded (group_id, filename)
-    API->>DB: images[].filemaker_uploadedをtrueに更新
+    Ext->>API: PATCH /external_api/mark_uploaded (_id)
+    API->>DB: imagesコレクションのdb_uploadedをtrueに更新
     alt 更新成功
         API->>Ext: JSON(更新メッセージ)
     else 対象なし
@@ -149,10 +179,12 @@ sequenceDiagram
     end
 
     %% --- メタデータ更新 ---
-    Ext->>API: PATCH /external/update_metadata (_id, title等)
+    Ext->>API: PATCH /external_api/update_metadata (_id, title等)
     API->>DB: 指定_idのドキュメントを部分更新
     alt 更新成功
         API->>Ext: JSON(更新メッセージ)
     else 対象なし/不正
         API->>Ext: エラー(JSON)
     end
+end
+```

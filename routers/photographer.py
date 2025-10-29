@@ -27,9 +27,16 @@ async def photographer_upload(request: Request, current_photographer: User = Dep
     return templates.TemplateResponse("photographer/upload.html", {"request": request, "user": current_photographer})
 
 
+from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
+
+@router.get("/upload_legacy.html", response_class=HTMLResponse)
+async def photographer_upload_legacy(request: Request, current_photographer: User = Depends(get_current_photographer)):
+    return templates.TemplateResponse("photographer/upload_legacy.html", {"request": request, "user": current_photographer})
+
+
 @router.get("/upload_old.html", response_class=HTMLResponse)
-async def photographer_upload_old(request: Request, current_photographer: User = Depends(get_current_photographer)):
-    return templates.TemplateResponse("photographer/upload_old.html", {"request": request, "user": current_photographer})
+async def photographer_upload_old_redirect(request: Request):
+    return RedirectResponse(url="/photographer/upload_legacy.html")
 
 
 @router.post("/temp_upload")

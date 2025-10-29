@@ -46,13 +46,11 @@
 <body class="container py-3">
 
   <header class="pb-3 mb-4 border-bottom">
-      <div class="d-flex align-items-center justify-content-between">
-          <a href="/photographer/upload.html" class="text-dark text-decoration-none">
-              <span class="fs-4">📷 商品画像のアップロード</span>
-          </a>
-          <div id="user-info">
-              <!-- ユーザー情報がここに表示されます -->
-          </div>
+      <a href="/photographer/upload.html" class="text-dark text-decoration-none">
+          <span class="fs-4">📷 商品画像のアップロード</span>
+      </a>
+      <div id="user-info" class="mt-2">
+          <!-- ユーザー情報がここに表示されます -->
       </div>
   </header>
   <div>
@@ -568,24 +566,34 @@
   </script>
 
   <script>
+      let currentUserRole = null; // ユーザーの役割を保持する変数
+
       // ログインしているユーザーの情報を取得する関数
       async function fetchCurrentUser() {
           try {
-              // このエンドポイントは、現在のユーザー情報を返すように別途実装が必要です
               const response = await fetch('/photographer/users/me');
               if (response.ok) {
                   const user = await response.json();
-                  document.getElementById('user-info').innerHTML = `
-                      <span class="me-3">ログイン中: <strong>${user.email}</strong></span>
-                      <button class="btn btn-sm btn-outline-secondary" onclick="logout()">ログアウト</button>
-                  `;
+                  currentUserRole = user.role; // ユーザーの役割を保存
+
+                  let userInfoHtml = `<span class="me-3">ログイン中: <strong>${user.email}</strong></span>`;
+
+                  // 運営者の場合、ダッシュボードへのボタンを追加
+                  if (currentUserRole === 'operator') {
+                      userInfoHtml += `<a href="/admin/dashboard" class="btn btn-sm btn-info me-2">ダッシュボードに戻る</a>`;
+                  }
+
+                  userInfoHtml += `<button class="btn btn-sm btn-outline-secondary" onclick="logout()">ログアウト</button>`;
+
+                  document.getElementById('user-info').innerHTML = userInfoHtml;
+
               } else {
-                  // ユーザーが取得できない場合（未ログインなど）はログインページへ
-                  window.location.href = '/photographer/login.html';
+                  // ユーザーが取得できない場合（未ログインなど）は適切なログインページへ
+                  window.location.href = '/photographer/login';
               }
           } catch (error) {
               console.error('ユーザー情報の取得に失敗しました:', error);
-              window.location.href = '/photographer/login.html';
+              window.location.href = '/photographer/login';
           }
       }
 
@@ -597,7 +605,12 @@
               });
               if (response.ok) {
                   alert('ログアウトしました。');
-                  window.location.href = '/photographer/login';
+                  // 役割に応じてリダイレクト先を変更
+                  if (currentUserRole === 'operator') {
+                      window.location.href = '/login';
+                  } else {
+                      window.location.href = '/photographer/login';
+                  }
               } else {
                   alert('ログアウトに失敗しました。');
               }

@@ -26,7 +26,14 @@
 </head>
 <body class="container py-3">
 
-  <h1 class="mb-4">📷 商品画像のアップロード</h1>
+  <header class="pb-3 mb-4 border-bottom">
+      <a href="/photographer/upload_old.html" class="text-dark text-decoration-none">
+          <span class="fs-4">📷 商品画像のアップロード (旧)</span>
+      </a>
+      <div id="user-info" class="mt-2">
+          <!-- ユーザー情報がここに表示されます -->
+      </div>
+  </header>
   <div>
     <div class="form-group">
       <label for="group_id_input" class="font-weight-bold">グループID:</label>
@@ -317,6 +324,65 @@
       }
 
     });
+  </script>
+
+  <script>
+      let currentUserRole = null; // ユーザーの役割を保持する変数
+
+      // ログインしているユーザーの情報を取得する関数
+      async function fetchCurrentUser() {
+          try {
+              const response = await fetch('/photographer/users/me');
+              if (response.ok) {
+                  const user = await response.json();
+                  currentUserRole = user.role; // ユーザーの役割を保存
+
+                  let userInfoHtml = `<span class="me-3">ログイン中: <strong>${user.email}</strong></span>`;
+
+                  // 運営者の場合、ダッシュボードへのボタンを追加
+                  if (currentUserRole === 'operator') {
+                      userInfoHtml += `<a href="/admin/dashboard" class="btn btn-sm btn-info me-2">ダッシュボードに戻る</a>`;
+                  }
+
+                  userInfoHtml += `<button class="btn btn-sm btn-outline-secondary" onclick="logout()">ログアウト</button>`;
+
+                  document.getElementById('user-info').innerHTML = userInfoHtml;
+
+              } else {
+                  // ユーザーが取得できない場合（未ログインなど）は適切なログインページへ
+                  window.location.href = '/photographer/login';
+              }
+          } catch (error) {
+              console.error('ユーザー情報の取得に失敗しました:', error);
+              window.location.href = '/photographer/login';
+          }
+      }
+
+      // ログアウト処理
+      async function logout() {
+          try {
+              const response = await fetch('/logout', {
+                  method: 'POST',
+              });
+              if (response.ok) {
+                  alert('ログアウトしました。');
+                  // 役割に応じてリダイレクト先を変更
+                  if (currentUserRole === 'operator') {
+                      window.location.href = '/login';
+                  } else {
+                      window.location.href = '/photographer/login';
+                  }
+              } else {
+                  alert('ログアウトに失敗しました。');
+              }
+          } catch (error) {
+              console.error('ログアウト処理中にエラーが発生しました:', error);
+              alert('ログアウト処理中にエラーが発生しました。');
+          }
+      }
+
+      // ページ読み込み時にユーザー情報を取得
+      document.addEventListener('DOMContentLoaded', fetchCurrentUser);
   </script>
 </body>
 </html>
