@@ -45,7 +45,16 @@
 </head>
 <body class="container py-3">
 
-  <h1 class="mb-4">📷 商品画像のアップロード</h1>
+  <header class="pb-3 mb-4 border-bottom">
+      <div class="d-flex align-items-center justify-content-between">
+          <a href="/photographer/upload.html" class="text-dark text-decoration-none">
+              <span class="fs-4">📷 商品画像のアップロード</span>
+          </a>
+          <div id="user-info">
+              <!-- ユーザー情報がここに表示されます -->
+          </div>
+      </div>
+  </header>
   <div>
     <span id="group-id-display" class="fw-bold"></span>
     <span id="resolution-display" class="text-info ms-3"></span><br />
@@ -556,6 +565,50 @@
     }
 
     }); // End of $(document).ready()
+  </script>
+
+  <script>
+      // ログインしているユーザーの情報を取得する関数
+      async function fetchCurrentUser() {
+          try {
+              // このエンドポイントは、現在のユーザー情報を返すように別途実装が必要です
+              const response = await fetch('/photographer/users/me');
+              if (response.ok) {
+                  const user = await response.json();
+                  document.getElementById('user-info').innerHTML = `
+                      <span class="me-3">ログイン中: <strong>${user.email}</strong></span>
+                      <button class="btn btn-sm btn-outline-secondary" onclick="logout()">ログアウト</button>
+                  `;
+              } else {
+                  // ユーザーが取得できない場合（未ログインなど）はログインページへ
+                  window.location.href = '/photographer/login.html';
+              }
+          } catch (error) {
+              console.error('ユーザー情報の取得に失敗しました:', error);
+              window.location.href = '/photographer/login.html';
+          }
+      }
+
+      // ログアウト処理
+      async function logout() {
+          try {
+              const response = await fetch('/logout', {
+                  method: 'POST',
+              });
+              if (response.ok) {
+                  alert('ログアウトしました。');
+                  window.location.href = '/photographer/login';
+              } else {
+                  alert('ログアウトに失敗しました。');
+              }
+          } catch (error) {
+              console.error('ログアウト処理中にエラーが発生しました:', error);
+              alert('ログアウト処理中にエラーが発生しました。');
+          }
+      }
+
+      // ページ読み込み時にユーザー情報を取得
+      document.addEventListener('DOMContentLoaded', fetchCurrentUser);
   </script>
 </body>
 </html>

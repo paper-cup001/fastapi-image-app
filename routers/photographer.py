@@ -1,4 +1,3 @@
-
 import os
 import logging
 import io
@@ -168,3 +167,10 @@ async def get_temp_list(group_id: str, current_photographer: User = Depends(get_
     logging.info("--- temp_list finished ---")
     
     return {"files": files}
+
+@router.get("/users/me", response_model=User)
+async def read_users_me(current_user: User = Depends(get_current_photographer)):
+    """
+    現在ログインしているユーザーの情報を返す。
+    """
+    return current_user

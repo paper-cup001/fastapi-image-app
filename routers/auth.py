@@ -41,3 +41,12 @@ async def login_for_access_token(response: Response, form_data: OAuth2PasswordRe
     )
 
     return {"access_token": access_token, "token_type": "bearer", "role": user.role}
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    """
+    ログアウト処理。クライアントのアクセストークンcookieを削除する。
+    """
+    response.delete_cookie("access_token")
+    return {"message": "Logout successful"}

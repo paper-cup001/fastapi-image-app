@@ -218,3 +218,10 @@ async def get_temp_files(current_operator: User = Depends(get_current_operator))
     for file in db.fs.files.find({"temporary": True}):
         files.append({"filename": file["filename"]})
     return {"files": files}
+
+@router.get("/users/me", response_model=User)
+async def read_users_me(current_user: User = Depends(get_current_operator)):
+    """
+    現在ログインしているユーザーの情報を返す。
+    """
+    return current_user
