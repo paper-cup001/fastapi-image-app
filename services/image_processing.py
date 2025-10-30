@@ -21,6 +21,8 @@ import numpy as np
 import imghdr
 import logging
 import threading
+from PIL import Image, ImageOps # ExifTagsを削除
+import io
 
 logging.basicConfig(level=logging.INFO)
 lock = threading.Lock()
@@ -62,13 +64,50 @@ def find_corner_point(points, corner="right"):
 def validate_image_file(image_data: bytes):
     if len(image_data) > MAX_IMAGE_SIZE:
         return False, "Image too large."
-    if not imghdr.what(None, h=image_data):
-        return False, "Invalid image format."
+    # Pillowで画像を読み込めるかチェック
+    try:
+        Image.open(io.BytesIO(image_data)).verify()
+    except Exception:
+        return False, "Invalid image format or corrupted file."
     return True, None
 
+def load_and_orient_image_pil(image_data: bytes) -> Image.Image:
+    """
+    Pillowで画像を読み込み、EXIFのOrientationタグに基づいて自動回転させたPIL Imageオブジェクトを返す。
+    """
+    img_pil = Image.open(io.BytesIO(image_data))
+    logging.info(f"Image opened. Original size: {img_pil.size}")
+
+    # EXIF情報を取得
+    exif_data = img_pil._getexif()
+    if exif_data:
+        logging.info(f"EXIF data found.")
+    else:
+        logging.info("No EXIF data found.")
+
+    img_pil = ImageOps.exif_transpose(img_pil) # EXIF Orientationを自動適用
+    logging.info(f"After exif_transpose. New size: {img_pil.size}")
+    return img_pil
+
 def read_image(image_data: bytes):
-    nparr = np.frombuffer(image_data, np.uint8)
-    return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    """
+    Pillowで画像を読み込み、EXIFのOrientationタグに基づいて自動回転させ、OpenCV形式に変換して返す。
+    """
+    try:
+        img_pil = load_and_orient_image_pil(image_data)
+        
+        # Pillow画像をOpenCV形式（NumPy配列）に変換
+        img_cv = np.array(img_pil)
+        # RGBからBGRへ変換 (OpenCVはBGRを期待するため)
+        if len(img_cv.shape) == 3 and img_cv.shape[2] == 3: # RGB画像の場合
+            img_cv = cv2.cvtColor(img_cv, cv2.COLOR_RGB2BGR)
+        elif len(img_cv.shape) == 3 and img_cv.shape[2] == 4: # RGBA画像の場合
+            img_cv = cv2.cvtColor(img_cv, cv2.COLOR_RGBA2BGR)
+
+        return img_cv
+    except Exception as e:
+        logging.error(f"Error reading or rotating image: {e}")
+        return None
 
 def make_square(image, min_x, max_x, min_y, max_y):
     height, width = max_y - min_y, max_x - min_x
@@ -107,7 +146,7 @@ def process_image(image_data: bytes, x_offset: int, y_offset: int, mode: str, ip
 
     img = read_image(image_data)
     if img is None:
-        return None, "Failed to decode image."
+        return None, "Failed to decode image or apply rotation."
 
     # パフォーマンスのために画像をリサイズしてQRコードを検出
     img_for_detection, ratio = resize_image(img, 1800)

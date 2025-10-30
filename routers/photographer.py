@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from PIL import Image
 
-from services.image_processing import process_image
+from services.image_processing import process_image, load_and_orient_image_pil
 from services.dummy_image import replace_white_with_color
 from db import db, collection, fs
 from zoneinfo import ZoneInfo
@@ -53,16 +53,17 @@ async def temp_upload(
         if test_mode:
             await file.read()
             dummy_image_path = "static/dummy_image.png"
-            processed_image = replace_white_with_color(dummy_image_path, photographer_id)
+            img_pil = load_and_orient_image_pil(replace_white_with_color(dummy_image_path, photographer_id))
         else:
             contents = await file.read()
             if source_page == "upload_old":
-                processed_image, _ = process_image(contents, 0, 0, "auto", "127.0.0.1")
-                if processed_image is None: processed_image = contents
+                processed_image_bytes, _ = process_image(contents, 0, 0, "auto", "127.0.0.1")
+                if processed_image_bytes is None: processed_image_bytes = contents
             else:
-                processed_image = contents
+                processed_image_bytes = contents
         
-        img_pil = Image.open(io.BytesIO(processed_image))
+            img_pil = load_and_orient_image_pil(processed_image_bytes)
+
         buffer = io.BytesIO()
         img_pil.save(buffer, format="PNG")
         buffer.seek(0)
