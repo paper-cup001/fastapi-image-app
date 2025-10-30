@@ -110,8 +110,32 @@
 - **GET** `/admin/generate_qr`: 生成ページ(HTML)を返す。
 - **POST** `/admin/generate_qr`: QRコードを生成してHTML内に表示する。
 
-### 10. その他管理機能
-- `/admin/search`: 登録画像一覧ページ(HTML)
+### 10. 登録画像の階層的検索
+- **GET** `/admin/search`
+- **説明**: 登録画像をグループIDの階層で検索・表示する。クエリパラメータの有無でレスポンス形式が変わる。
+- **クエリパラメータ (任意)**:
+    - `group_id`: string
+- **レスポンス**:
+    - **パラメータなしの場合 (JSON)**: グループIDの一覧と各アイテム数を、最新更新順で返す。
+        ```json
+        {
+          "groups": [
+            {
+              "_id": "GROUP_001",
+              "item_count": 15,
+              "last_updated": "2025-10-29T12:30:00Z"
+            },
+            {
+              "_id": "GROUP_002",
+              "item_count": 8,
+              "last_updated": "2025-10-28T18:00:00Z"
+            }
+          ]
+        }
+        ```
+    - **`group_id`指定の場合 (HTML)**: そのグループIDに所属する画像一覧ページのHTMLを返す。
+
+### 11. その他管理機能
 - `/admin/detail/{item_id}`: 画像詳細ページ(HTML)
 - `/admin/delete/{item_id}`: 画像削除処理
 - `/admin/statistics`: 統計情報ページ(HTML)

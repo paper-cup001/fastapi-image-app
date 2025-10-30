@@ -1,0 +1,25 @@
+{% if results %}
+    {% for item in results %}
+      <div class="col">
+        <a href="/admin/detail/{{ item._id }}?group_id={{ item.group_id }}" class="text-decoration-none text-dark">
+          <div class="card h-100">
+            <div class="card-body">
+              <p class="card-text">
+                <strong>登録年月日:</strong> {{ item.created_at or "未設定" }}<br>
+                <strong>group_id:</strong> {{ item.group_id or "未設定" }}<br>
+                <strong>撮影者ID:</strong> {{ item.photographer_id or "未設定" }}<br>
+                <strong>画像枚数:</strong> {{ item.images | length if item.images else 0 }}
+              </p>
+            </div>
+            {% if item.thumbnail_base64 %}
+              <img src="data:image/jpeg;base64,{{ item.thumbnail_base64 }}" class="card-img-bottom" alt="Thumbnail">
+            {% else %}
+              <div class="card-img-bottom bg-secondary text-white text-center py-5">No Image</div>
+            {% endif %}
+          </div>
+        </a>
+      </div>
+    {% endfor %}
+{% else %}
+    <div class="alert alert-warning mt-4">登録済み画像が見つかりませんでした。</div>
+{% endif %}

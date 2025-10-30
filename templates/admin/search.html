@@ -2,84 +2,150 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>画像検索結果 - 管理者</title>
+  <title>登録画像一覧</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/static/css/custom.css">
+  <style>
+    .folder {
+      cursor: pointer;
+    }
+    .folder .bi-folder-fill {
+      font-size: 3rem;
+      color: #6c757d;
+    }
+    .folder:hover .bi-folder-fill {
+      color: #495057;
+    }
+  </style>
 </head>
-<body class="container py-4">
-
-  <!-- 戻るボタン（ページ先頭） -->
-  <div class="mb-3">
-    <a href="/admin/dashboard" class="btn btn-secondary">← ダッシュボードに戻る</a>
-  </div>
-
-  <h2 class="mb-4">MongoDB 登録画像一覧</h2>
-
-  <!-- 検索フォーム -->
-  <form method="get" action="/admin/search" class="mb-4">
-    <div class="row g-2 align-items-end">
-      <div class="col-sm-4">
-        <label for="group_id" class="form-label">Group ID</label>
-        <input type="text" id="group_id" name="group_id" value="{{ group_id }}" class="form-control">
-      </div>
-      <div class="col-sm-4">
-        <label for="date" class="form-label">登録日（例: 2025-06-22）</label>
-        <input type="date" id="date" name="date" value="{{ date }}" class="form-control">
-      </div>
-      <div class="col-sm-4">
-        <label class="form-label">アップロード状態</label><br>
-        <div class="form-check form-check-inline">
-          <input class="form-check-input" type="radio" name="db_uploaded" id="db_uploaded_true" value="true" {% if db_uploaded == 'true' %}checked{% endif %}>
-          <label class="form-check-label" for="db_uploaded_true">アップロード済</label>
-        </div>
-        <div class="form-check form-check-inline">
-          <input class="form-check-input" type="radio" name="db_uploaded" id="db_uploaded_false" value="false" {% if db_uploaded == 'false' %}checked{% endif %}>
-          <label class="form-check-label" for="db_uploaded_false">未アップロード</label>
-        </div>
-      </div>
-      <div class="col-sm-4">
-        <button type="submit" class="btn btn-primary">検索</button>
-      </div>
-    </div>
-  </form>
-
-  {% if results %}
-    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-      {% for item in results %}
-        <div class="col">
-          <a href="/admin/detail/{{ item._id }}?group_id={{ group_id }}&date={{ date }}" class="text-decoration-none text-dark">
-            <div class="card h-100">
-              <div class="card-body">
-                <p class="card-text">
-                  <strong>登録年月日:</strong> {{ item.created_at or "未設定" }}<br>
-                  <strong>group_id:</strong> {{ item.group_id or "未設定" }}<br>
-                  <strong>user_short_id:</strong> {{ item.user_short_id or "未設定" }}<br>
-                  <strong>画像枚数:</strong> {{ item.images | length if item.images else 0 }}
-                </p>
-              </div>
-              {% if item.thumbnail_base64 %}
-                <img src="data:image/jpeg;base64,{{ item.thumbnail_base64 }}" class="card-img-bottom" alt="Thumbnail">
-              {% else %}
-                <div class="card-img-bottom bg-secondary text-white text-center py-5">No Image</div>
-              {% endif %}
+<body class="bg-light">
+  <div class="container py-4">
+    <div class="row justify-content-center">
+      <div class="col-12 col-lg-10">
+        <div id="view-container">
+          <!-- フォルダ一覧表示 -->
+          <div id="folder-view">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+              <h2 class="mb-0">グループ一覧</h2>
+              <a href="/admin/dashboard" class="btn btn-secondary">← 戻る</a>
             </div>
-          </a>
-        </div>
-      {% endfor %}
-    </div>
-  {% else %}
-    <div class="alert alert-warning mt-4">登録済み画像が見つかりませんでした。</div>
-  {% endif %}
+            <div class="mb-3">
+              <input type="text" id="folder-search" class="form-control" placeholder="グループIDで絞り込み...">
+            </div>
+            <div id="folder-list" class="row row-cols-2 row-cols-md-4 row-cols-lg-6 g-4">
+              <!-- JSで動的に生成 -->
+            </div>
+          </div>
 
-  <!-- 戻るボタン（ページ末尾） -->
-  <div class="mt-4">
-    <a href="/admin/dashboard" class="btn btn-secondary">← ダッシュボードに戻る</a>
+          <!-- 画像一覧表示 -->
+          <div id="item-view" style="display: none;">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+              <h2 id="item-view-title" class="mb-0"></h2>
+              <button id="back-to-folders" class="btn btn-secondary">← 戻る</button>
+            </div>
+            <div id="item-list" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+              <!-- JSで動的に生成 -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
-  {% if request.query_params.get('deleted') %}
-    <script>
-      alert("削除しました");
-    </script>
-  {% endif %}
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const folderView = document.getElementById('folder-view');
+      const itemView = document.getElementById('item-view');
+      const folderList = document.getElementById('folder-list');
+      const itemList = document.getElementById('item-list');
+      const backButton = document.getElementById('back-to-folders');
+      const folderSearch = document.getElementById('folder-search');
+      const itemViewTitle = document.getElementById('item-view-title');
+
+      let allGroups = [];
+
+      // 初期表示: フォルダ一覧を取得して表示
+      async function fetchAndDisplayFolders() {
+        try {
+          const response = await fetch('/admin/api/groups');
+          const data = await response.json();
+          allGroups = data.groups || [];
+          renderFolders(allGroups);
+        } catch (error) {
+          console.error('Error fetching groups:', error);
+          folderList.innerHTML = '<div class="alert alert-danger">グループの読み込みに失敗しました。</div>';
+        }
+      }
+
+      // フォルダ一覧を描画
+      function renderFolders(groups) {
+        folderList.innerHTML = '';
+        if (groups.length === 0) {
+          folderList.innerHTML = '<div class="alert alert-warning">登録済みのグループが見つかりませんでした。</div>';
+          return;
+        }
+        groups.forEach(group => {
+          const col = document.createElement('div');
+          col.className = 'col text-center folder';
+          col.dataset.groupId = group._id;
+          col.innerHTML = `
+            <i class="bi bi-folder-fill"></i>
+            <div class="mt-2"><strong>${group._id}</strong></div>
+            <div class="text-muted small">${group.item_count} アイテム</div>
+            <div class="text-muted small">${group.first_created.substring(0, 10)}</div>
+          `;
+          col.addEventListener('click', () => showItems(group._id));
+          folderList.appendChild(col);
+        });
+      }
+
+      // 特定グループの画像一覧を表示
+      async function showItems(groupId) {
+        try {
+          const response = await fetch(`/admin/api/items?group_id=${encodeURIComponent(groupId)}`);
+          const html = await response.text();
+          
+          itemList.innerHTML = html;
+          itemViewTitle.textContent = `グループ: ${groupId}`;
+          folderView.style.display = 'none';
+          itemView.style.display = 'block';
+        } catch (error) {
+          console.error(`Error fetching items for ${groupId}:`, error);
+          itemList.innerHTML = '<div class="alert alert-danger">画像の読み込みに失敗しました。</div>';
+        }
+      }
+
+      // フォルダ一覧に戻る
+      backButton.addEventListener('click', () => {
+        // フォルダデータが未読み込みの場合（詳細画面からの遷移など）は、ここで取得する
+        if (allGroups.length === 0) {
+          fetchAndDisplayFolders();
+        }
+        itemView.style.display = 'none';
+        folderView.style.display = 'block';
+        itemList.innerHTML = ''; // 内容をクリア
+      });
+
+      // フォルダ検索（絞り込み）
+      folderSearch.addEventListener('input', (e) => {
+        const searchTerm = e.target.value.toLowerCase();
+        const filteredGroups = allGroups.filter(group => group._id.toLowerCase().includes(searchTerm));
+        renderFolders(filteredGroups);
+      });
+
+      // 初期化
+      const urlParams = new URLSearchParams(window.location.search);
+      const groupIdFromUrl = urlParams.get('group_id');
+
+      if (groupIdFromUrl) {
+        showItems(groupIdFromUrl);
+      } else {
+        fetchAndDisplayFolders();
+      }
+    });
+  </script>
 
 </body>
 </html>

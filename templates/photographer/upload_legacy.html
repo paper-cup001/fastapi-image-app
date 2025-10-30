@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" />
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
   <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
+  <link rel="stylesheet" href="/static/css/custom.css">
   <style>
     #thumbnails .img-thumbnail {
       width: 100%;
@@ -24,102 +25,109 @@
     .btn-half { width: 49%; }
   </style>
 </head>
-<body class="container py-3">
+<body class="bg-light">
+  <div class="container py-3">
+    <div class="row justify-content-center">
+        <div class="col-12">
+            <header class="pb-3 mb-4 border-bottom bg-white p-3 rounded-top">
+                <a href="/photographer/upload_old.html" class="text-dark text-decoration-none">
+                    <span class="fs-4">📷 商品画像のアップロード (旧)</span>
+                </a>
+                <div id="user-info" class="mt-2">
+                    <!-- ユーザー情報がここに表示されます -->
+                </div>
+            </header>
+            <main class="bg-white p-3 rounded-bottom">
+              <div>
+                <div class="form-group">
+                  <label for="group_id_input" class="font-weight-bold">グループID:</label>
+                  <input type="text" id="group_id_input" class="form-control">
+                </div>
+              </div>
+              
+              <!-- 品質・コメント選択（アコーディオン1つに統合） -->
+              <div class="accordion mb-4" id="qualityCommentAccordion">
+                <div class="card">
+                  <div class="card-header" id="headingQualityComment">
+                    <h2 class="mb-0">
+                      <button class="btn btn-link collapsed" type="button" data-toggle="collapse" data-target="#collapseQualityComment" aria-expanded="false" aria-controls="collapseQualityComment">
+                        品質・コメントを選択
+                      </button>
+                    </h2>
+                  </div>
+                  <div id="collapseQualityComment" class="collapse" aria-labelledby="headingQualityComment" data-parent="#qualityCommentAccordion">
+                    <div class="card-body">
+                      <!-- 品質選択 -->
+                      <div class="mb-3">
+                        <label for="quality" class="form-label">品質:</label>
+                        <select id="quality" name="quality" class="form-control">
+                          <option value="0" selected>0: 未確認</option>
+                          <option value="1">1: 故障 or 販売不可</option>
+                          <option value="2">2: 傷や汚れあり</option>
+                          <option value="3">3: やや傷や汚れあり</option>
+                          <option value="4">4: 傷や汚れはわずか</option>
+                          <option value="5">5: 未使用品</option>
+                          <option value="6">6: 新品 or 未開封品</option>
+                        </select>
+                      </div>
+                      <!-- コメント選択 -->
+                      <div class="mb-4">
+                        <label class="form-label">コメント:</label><br>
+                        <div class="form-check form-check-inline">
+                          <input class="form-check-input" type="checkbox" id="no-box-manual" value="箱説なし">
+                          <label class="form-check-label" for="no-box-manual">箱説なし</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                          <input class="form-check-input" type="checkbox" id="no-box" value="箱なし">
+                          <label class="form-check-label" for="no-box">箱なし</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                          <input class="form-check-input" type="checkbox" id="no-manual" value="説明書なし">
+                          <label class="form-check-label" for="no-manual">説明書なし</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                          <input class="form-check-input" type="checkbox" id="no-accessory" value="付属品欠品">
+                          <label class="form-check-label" for="no-accessory">付属品欠品</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                          <input class="form-check-input" type="checkbox" id="box-damage" value="箱いたみ">
+                          <label class="form-check-label" for="box-damage">箱いたみ</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                          <input class="form-check-input" type="checkbox" id="manual-damage" value="説明書いたみ">
+                          <label class="form-check-label" for="manual-damage">説明書いたみ</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                          <input class="form-check-input" type="checkbox" id="battery-dead" value="バッテリー切れ">
+                          <label class="form-check-label" for="battery-dead">バッテリー切れ</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                          <input class="form-check-input" type="checkbox" id="case-damage" value="ケースにヒビ・割れ">
+                          <label class="form-check-label" for="case-damage">ケースにヒビ or ケース割れ</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                          <input class="form-check-input" type="checkbox" id="misc" value="その他">
+                          <label class="form-check-label" for="misc">その他</label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-  <header class="pb-3 mb-4 border-bottom">
-      <a href="/photographer/upload_old.html" class="text-dark text-decoration-none">
-          <span class="fs-4">📷 商品画像のアップロード (旧)</span>
-      </a>
-      <div id="user-info" class="mt-2">
-          <!-- ユーザー情報がここに表示されます -->
-      </div>
-  </header>
-  <div>
-    <div class="form-group">
-      <label for="group_id_input" class="font-weight-bold">グループID:</label>
-      <input type="text" id="group_id_input" class="form-control">
-    </div>
-  </div>
-  
-  <!-- 品質・コメント選択（アコーディオン1つに統合） -->
-  <div class="accordion mb-4" id="qualityCommentAccordion">
-    <div class="card">
-      <div class="card-header" id="headingQualityComment">
-        <h2 class="mb-0">
-          <button class="btn btn-link collapsed" type="button" data-toggle="collapse" data-target="#collapseQualityComment" aria-expanded="false" aria-controls="collapseQualityComment">
-            品質・コメントを選択
-          </button>
-        </h2>
-      </div>
-      <div id="collapseQualityComment" class="collapse" aria-labelledby="headingQualityComment" data-parent="#qualityCommentAccordion">
-        <div class="card-body">
-          <!-- 品質選択 -->
-          <div class="mb-3">
-            <label for="quality" class="form-label">品質:</label>
-            <select id="quality" name="quality" class="form-control">
-              <option value="0" selected>0: 未確認</option>
-              <option value="1">1: 故障 or 販売不可</option>
-              <option value="2">2: 傷や汚れあり</option>
-              <option value="3">3: やや傷や汚れあり</option>
-              <option value="4">4: 傷や汚れはわずか</option>
-              <option value="5">5: 未使用品</option>
-              <option value="6">6: 新品 or 未開封品</option>
-            </select>
-          </div>
-          <!-- コメント選択 -->
-          <div class="mb-4">
-            <label class="form-label">コメント:</label><br>
-            <div class="form-check form-check-inline">
-              <input class="form-check-input" type="checkbox" id="no-box-manual" value="箱説なし">
-              <label class="form-check-label" for="no-box-manual">箱説なし</label>
-            </div>
-            <div class="form-check form-check-inline">
-              <input class="form-check-input" type="checkbox" id="no-box" value="箱なし">
-              <label class="form-check-label" for="no-box">箱なし</label>
-            </div>
-            <div class="form-check form-check-inline">
-              <input class="form-check-input" type="checkbox" id="no-manual" value="説明書なし">
-              <label class="form-check-label" for="no-manual">説明書なし</label>
-            </div>
-            <div class="form-check form-check-inline">
-              <input class="form-check-input" type="checkbox" id="no-accessory" value="付属品欠品">
-              <label class="form-check-label" for="no-accessory">付属品欠品</label>
-            </div>
-            <div class="form-check form-check-inline">
-              <input class="form-check-input" type="checkbox" id="box-damage" value="箱いたみ">
-              <label class="form-check-label" for="box-damage">箱いたみ</label>
-            </div>
-            <div class="form-check form-check-inline">
-              <input class="form-check-input" type="checkbox" id="manual-damage" value="説明書いたみ">
-              <label class="form-check-label" for="manual-damage">説明書いたみ</label>
-            </div>
-            <div class="form-check form-check-inline">
-              <input class="form-check-input" type="checkbox" id="battery-dead" value="バッテリー切れ">
-              <label class="form-check-label" for="battery-dead">バッテリー切れ</label>
-            </div>
-            <div class="form-check form-check-inline">
-              <input class="form-check-input" type="checkbox" id="case-damage" value="ケースにヒビ・割れ">
-              <label class="form-check-label" for="case-damage">ケースにヒビ or ケース割れ</label>
-            </div>
-            <div class="form-check form-check-inline">
-              <input class="form-check-input" type="checkbox" id="misc" value="その他">
-              <label class="form-check-label" for="misc">その他</label>
-            </div>
-          </div>
+              <div id="shoot-section" style="display: none;">
+                <form id="shoot-form" enctype="multipart/form-data">
+                  <input type="file" id="shoot-file" name="file" accept="image/*" capture="environment" style="display: none;" />
+                  <input type="hidden" id="group_id" name="group_id" value="sample_01" />
+                </form>
+
+                <div>
+                  <h2 class="h5">サムネイルプレビュー（最大10枚）</h2>
+                  <div id="thumbnails" class="row mb-5"></div>
+                </div>
+              </div>
+            </main>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="shoot-section" style="display: none;">
-    <form id="shoot-form" enctype="multipart/form-data">
-      <input type="file" id="shoot-file" name="file" accept="image/*" capture="environment" style="display: none;" />
-      <input type="hidden" id="group_id" name="group_id" value="sample_01" />
-    </form>
-
-    <div>
-      <h2 class="h5">サムネイルプレビュー（最大10枚）</h2>
-      <div id="thumbnails" class="row mb-5"></div>
     </div>
   </div>
 
@@ -141,7 +149,7 @@
 
 
       function getQueryParam(name) {
-          name = name.replace(/[[\\]]/, "\\\[").replace(/[[\\]]/, "\\\]");
+          name = name.replace(/[[\]]/, "\\\[").replace(/[[\]]/, "\\\\]");
           var regex = new RegExp("[\\?&]" + name + "=([^&#]*)");
           var results = regex.exec(location.search);
           return results === null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
@@ -339,12 +347,13 @@
 
                   let userInfoHtml = `<span class="me-3">ログイン中: <strong>${user.email}</strong></span>`;
 
-                  // 運営者の場合、ダッシュボードへのボタンを追加
-                  if (currentUserRole === 'operator') {
-                      userInfoHtml += `<a href="/admin/dashboard" class="btn btn-sm btn-info me-2">ダッシュボードに戻る</a>`;
-                  }
+                  // ログアウトボタンを先に追加
+                  userInfoHtml += `<button class="btn btn-sm btn-outline-secondary me-2" onclick="logout()">ログアウト</button>`;
 
-                  userInfoHtml += `<button class="btn btn-sm btn-outline-secondary" onclick="logout()">ログアウト</button>`;
+                  // 運営者の場合、グレーの「戻る」ボタンをログアウトの右側に追加
+                  if (currentUserRole === 'operator') {
+                      userInfoHtml += `<a href="/admin/dashboard" class="btn btn-sm btn-secondary">← 戻る</a>`;
+                  }
 
                   document.getElementById('user-info').innerHTML = userInfoHtml;
 

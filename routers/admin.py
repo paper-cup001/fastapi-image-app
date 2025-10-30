@@ -117,24 +117,8 @@ async def show_statistics(request: Request, current_operator: User = Depends(get
     })
 
 @router.get("/search", response_class=HTMLResponse)
-async def search_registered(request: Request, group_id: str = "", date: str = "", db_uploaded: str = "", current_operator: User = Depends(get_current_operator)):
-    query = {}
-    if group_id: query["group_id"] = group_id
-    if date: query["created_at"] = {"$regex": f"^{date}"}
-    if db_uploaded in ("true", "false"): query["db_uploaded"] = db_uploaded == "true"
-
-    results = list(collection.find(query))
-    for doc in results:
-        if doc.get("images") and doc["images"][0].get("filename"):
-            file = fs.find_one({"filename": doc["images"][0]["filename"]})
-            doc["thumbnail_base64"] = base64.b64encode(file.read()).decode() if file else None
-        else:
-            doc["thumbnail_base64"] = None
-
-    return templates.TemplateResponse("admin/search.html", {
-        "request": request, "results": results, "group_id": group_id,
-        "date": date, "db_uploaded": db_uploaded, "user": current_operator
-    })
+async def show_search_page(request: Request, current_operator: User = Depends(get_current_operator)):
+    return templates.TemplateResponse("admin/search.html", {"request": request, "user": current_operator})
 
 @router.get("/detail/{item_id}", response_class=HTMLResponse)
 async def show_detail(request: Request, item_id: str, group_id: str = "", date: str = "", current_operator: User = Depends(get_current_operator)):
@@ -165,6 +149,48 @@ async def delete_item(request: Request, item_id: str, group_id: str = "", date: 
     collection.delete_one({"_id": ObjectId(item_id)})
     url = f"/admin/search?group_id={group_id}&date={date}&deleted=1"
     return RedirectResponse(url=url, status_code=status.HTTP_303_SEE_OTHER)
+
+# --- Search API Endpoints ---
+
+@router.get("/api/groups")
+async def get_groups(current_operator: User = Depends(get_current_operator)):
+    """グループ一覧と各アイテム数をJSONで返す"""
+    pipeline = [
+        {
+            "$group": {
+                "_id": "$group_id",
+                "item_count": {"$sum": 1},
+                "last_updated": {"$max": "$created_at"},
+                "first_created": {"$min": "$created_at"} # 最初の登録日を追加
+            }
+        },
+        {
+            "$sort": {"last_updated": -1}
+        }
+    ]
+    groups = list(collection.aggregate(pipeline))
+    return JSONResponse(content={"groups": groups})
+
+@router.get("/api/items", response_class=HTMLResponse)
+async def get_items_for_group(request: Request, group_id: str, current_operator: User = Depends(get_current_operator)):
+    """指定されたgroup_idに所属するアイテム一覧をHTMLで返す"""
+    query = {"group_id": group_id}
+    results = list(collection.find(query).sort("created_at", -1))
+    
+    for doc in results:
+        if doc.get("images") and doc["images"][0].get("filename"):
+            file = fs.find_one({"filename": doc["images"][0]["filename"]})
+            doc["thumbnail_base64"] = base64.b64encode(file.read()).decode() if file else None
+        else:
+            doc["thumbnail_base64"] = None
+
+    return templates.TemplateResponse("admin/_search_results.html", {
+        "request": request, 
+        "results": results
+    })
+
+# --- End Search API Endpoints ---
+
 
 # --- Photographer Management APIs ---
 

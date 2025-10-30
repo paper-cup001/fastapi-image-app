@@ -60,12 +60,9 @@ def read_root():
 def upload_test(request: Request):
     return templates.TemplateResponse("photographer/upload.html", {"request": request})
 
-# temp_images を静的配信。これがないと仮保存画像一覧で画像が表示されない。
 app.mount("/temp_images", StaticFiles(directory="temp_images"), name="temp_images")
 
-# ...existing code...
 app.mount("/static", StaticFiles(directory="static"), name="static")
-# ...existing code...
 
 
 

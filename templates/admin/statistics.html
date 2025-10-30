@@ -3,37 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <title>グループID毎の統計情報</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/custom.css">
 </head>
-<body class="container py-5">
-    <h1 class="mb-4">📊 グループID毎の統計情報</h1>
+<body class="bg-light">
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-12 col-lg-10">
+                <div class="bg-white p-4 rounded">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h1 class="mb-0">📊 グループID毎の統計情報</h1>
+                    <a href="/admin/dashboard" class="btn btn-secondary">← 戻る</a>
+                </div>
 
-    <div class="form-check mb-3">
-        <input class="form-check-input" type="checkbox" id="hide-completed">
-        <label class="form-check-label" for="hide-completed">
-            アップロード率100%のグループを非表示にする
-        </label>
-    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="hide-completed">
+                        <label class="form-check-label" for="hide-completed">
+                            アップロード率100%のグループを非表示にする
+                        </label>
+                    </div>
 
-    <div class="list-group" id="statistics-list">
-        {% for stat in statistics %}
-        <div class="list-group-item flex-column align-items-start" data-percentage="{{ stat.upload_percentage }}">
-            <div class="d-flex w-100 justify-content-between">
-                <h5 class="mb-1">{{ stat.group_id }}</h5>
-                <small>アップロード率: {{ "%.2f"|format(stat.upload_percentage) }}%</small>
-            </div>
-            <p class="mb-1">
-                アップロード済: {{ stat.uploaded_count }}件 / 未アップロード: {{ stat.not_uploaded_count }}件 (合計: {{ stat.total_count }}件)
-            </p>
-            <div class="d-flex justify-content-between align-items-center mt-2">
-                <a href="/admin/search?group_id={{ stat.group_id }}" class="btn btn-primary btn-sm">画像一覧へ移動</a>
-                <button class="btn btn-danger btn-sm delete-group-btn" data-group-id="{{ stat.group_id }}">このグループの画像を一括削除</button>
+                    <div class="list-group" id="statistics-list">
+                        {% for stat in statistics %}
+                        <div class="list-group-item flex-column align-items-start" data-percentage="{{ stat.upload_percentage }}">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h5 class="mb-1">{{ stat.group_id }}</h5>
+                                <small>アップロード率: {{ "%.2f"|format(stat.upload_percentage) }}%</small>
+                            </div>
+                            <p class="mb-1">
+                                アップロード済: {{ stat.uploaded_count }}件 / 未アップロード: {{ stat.not_uploaded_count }}件 (合計: {{ stat.total_count }}件)
+                            </p>
+                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                <a href="/admin/search?group_id={{ stat.group_id }}" class="btn btn-primary btn-sm">画像一覧へ移動</a>
+                                <button class="btn btn-danger btn-sm delete-group-btn" data-group-id="{{ stat.group_id }}">このグループの画像を一括削除</button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                </div>
             </div>
         </div>
-        {% endfor %}
-    </div>
-    <div class="mt-4">
-        <a href="/admin/dashboard" class="btn btn-secondary">ダッシュボードに戻る</a>
     </div>
 
     <script>

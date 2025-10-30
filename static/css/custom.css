@@ -1,0 +1,18 @@
+/* 基本の文字サイズ（PCなど） */
+body {
+    font-size: 1rem; /* 16pxが基準 */
+}
+
+/* 段階1: 少し狭い画面（スマホ横向き、タブレット縦向きなど） */
+@media (max-width: 768px) {
+    body, .btn, .form-control, .form-label, .form-check-label, .list-group-item, h1, h2, h3, h4, h5, p, span, a, th, td, small, select, option, .card-text {
+        font-size: 1.1rem;
+    }
+}
+
+/* 段階2: 特に狭い画面（スマホ縦向き） */
+@media (max-width: 420px) {
+    body, .btn, .form-control, .form-label, .form-check-label, .list-group-item, h1, h2, h3, h4, h5, p, span, a, th, td, small, select, option, .card-text {
+        font-size: 1.2rem;
+    }
+}

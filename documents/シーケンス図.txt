@@ -127,10 +127,21 @@ sequenceDiagram
     API->>Front: 結果(JSON)返却
     Front->>Front: 画面更新
 
-    %% --- その他（検索、統計など）---
-    Note over Admin, DB: 検索、詳細表示、削除、統計表示などのフローは、
+    %% --- 登録画像の階層検索 ---
+    Admin->>Front: 「MongoDB 登録画像一覧」にアクセス
+    Front->>API: GET /admin/search (Cookie認証)
+    API->>DB: GroupID毎のアイテム数と最終更新日を検索
+    API->>Front: グループ一覧(JSON)を返却
+    Front->>Front: 受け取ったJSONを元にフォルダ一覧を動的生成
+
+    Admin->>Front: 特定のフォルダをクリック
+    Front->>API: GET /admin/search?group_id=... (Cookie認証)
+    API->>DB: 該当グループの商品一覧を検索
+    API->>Front: 商品一覧(HTML)を返却
+    Front->>Front: 画面を商品一覧に切り替え
+
+    Note over Admin, DB: 詳細表示、削除、統計表示などのフローは、
     Note over Admin, DB: すべて認証(Cookie)を伴うAPIリクエストを介して行われる。
-    Note over Admin, DB: (詳細は旧シーケンス図参照)
 end
 ```
 
