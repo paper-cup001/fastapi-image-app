@@ -131,3 +131,7 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+# Project-specific ignores
+# Ignore files in the parent directory
+../マーケティング調査.md
