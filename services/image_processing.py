@@ -131,6 +131,19 @@ def resize_image(img, max_dimension):
         return resized_img, ratio
     return img, 1.0
 
+def generate_thumbnail(pil_image: Image.Image, max_size: int = 600) -> tuple[Image.Image, bool]:
+    """
+    Pillow Imageオブジェクトからサムネイルを生成する。
+    アスペクト比を維持しつつ、指定されたmax_sizeに収まるようにリサイズする。
+    縮小が行われたかどうかを示す真偽値も返す。
+    """
+    original_size = pil_image.size
+    thumbnail_image = pil_image.copy()
+    thumbnail_image.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+    
+    was_scaled_down = (original_size != thumbnail_image.size)
+    return thumbnail_image, was_scaled_down
+
 def process_image(image_data: bytes, x_offset: int, y_offset: int, mode: str, ip: str) -> tuple[bytes, str | None]:
     """
     QRコードを検出し、画像をトリミングして返す。

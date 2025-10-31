@@ -45,3 +45,9 @@ class User(UserBase):
 class UserInDB(User):
     """データベース内部で完全なユーザー情報を扱うためのスキーマ"""
     hashed_password: str = Field(..., description="ハッシュ化されたパスワード")
+
+class ImageInfo(BaseModel):
+    """imagesコレクション内の画像情報のスキーマ"""
+    filename: str
+    thumbnail_filename: str
+    file_id: str

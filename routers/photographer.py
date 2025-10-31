@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from PIL import Image
 
-from services.image_processing import process_image, load_and_orient_image_pil
+from services.image_processing import process_image, load_and_orient_image_pil, generate_thumbnail
 from services.dummy_image import replace_white_with_color
 from db import db, collection, fs
 from zoneinfo import ZoneInfo
@@ -64,28 +64,64 @@ async def temp_upload(
         
             img_pil = load_and_orient_image_pil(processed_image_bytes)
 
-        buffer = io.BytesIO()
-        img_pil.save(buffer, format="PNG")
-        buffer.seek(0)
+        # フルサイズ画像をGridFSに保存 (JPEG形式、品質90)
+        full_image_buffer = io.BytesIO()
+        # 画像モードをJPEG互換のRGBに変換（RGBAの場合は透明部分を白で埋める）
+        if img_pil.mode == 'RGBA':
+            background = Image.new('RGB', img_pil.size, (255, 255, 255)) # 白背景を作成
+            background.paste(img_pil, mask=img_pil.split()[3]) # アルファチャンネルをマスクとして使用
+            img_pil = background
+        elif img_pil.mode != 'RGB':
+            img_pil = img_pil.convert('RGB')
+        img_pil.save(full_image_buffer, format="JPEG", quality=90)
+        full_image_buffer.seek(0)
 
         now = datetime.now(ZoneInfo('Asia/Tokyo'))
-        filename = f"{group_id}_{photographer_id}_{now.strftime('%Y%m%d%H%M%S%f')}.png"
+        full_filename = f"{group_id}_{photographer_id}_{now.strftime('%Y%m%d%H%M%S%f')}_full.jpeg"
 
         fs.put(
-            buffer.getvalue(),
-            filename=filename,
+            full_image_buffer.getvalue(),
+            filename=full_filename,
             group_id=group_id,
             photographer_id=photographer_id,
             temporary=True,
             uploadDate=datetime.utcnow() # Deletion sorting key
         )
 
-        buffer.seek(0)
-        thumbnail_b64 = base64.b64encode(buffer.getvalue()).decode()
+        # サムネイル画像を生成しGridFSに保存 (JPEG形式、品質85)
+        thumbnail_pil, was_scaled_down = generate_thumbnail(img_pil, max_size=600) # max_sizeは適宜調整
+        thumbnail_buffer = io.BytesIO()
+        # サムネイルもRGBAモードの可能性があるのでRGBに変換
+        if thumbnail_pil.mode == 'RGBA':
+            background = Image.new('RGB', thumbnail_pil.size, (255, 255, 255)) # 白背景を作成
+            background.paste(thumbnail_pil, mask=thumbnail_pil.split()[3]) # アルファチャンネルをマスクとして使用
+            thumbnail_pil = background
+        elif thumbnail_pil.mode != 'RGB':
+            thumbnail_pil = thumbnail_pil.convert('RGB')
+        thumbnail_pil.save(thumbnail_buffer, format="JPEG", quality=85)
+        thumbnail_buffer.seek(0)
+
+        thumbnail_filename = f"{group_id}_{photographer_id}_{now.strftime('%Y%m%d%H%M%S%f')}_thumb.jpeg"
+
+        fs.put(
+            thumbnail_buffer.getvalue(),
+            filename=thumbnail_filename,
+            group_id=group_id,
+            photographer_id=photographer_id,
+            temporary=True,
+            uploadDate=datetime.utcnow(),
+            is_thumbnail=True # サムネイルであることを示すフラグ
+        )
+
+        # フロントエンドにはサムネイルをBase64で返す
+        thumbnail_buffer.seek(0)
+        thumbnail_b64 = base64.b64encode(thumbnail_buffer.getvalue()).decode()
 
         return {
             "thumbnail": thumbnail_b64,
-            "filename": filename,
+            "filename": full_filename, # フルサイズ画像のファイル名も返す
+            "thumbnail_filename": thumbnail_filename, # サムネイルのファイル名も返す
+            "is_thumbnail_scaled_down": was_scaled_down # サムネイルが縮小されたかどうかのフラグ
         }
 
     except Exception as e:
@@ -115,22 +151,30 @@ async def temp_delete(data: dict = Body(...), current_photographer: User = Depen
 @router.post("/finalize_upload")
 async def finalize_upload(data: dict = Body(...), current_photographer: User = Depends(get_current_photographer)):
     group_id = data.get("group_id")
-    filenames = data.get("filenames", [])
+    filenames_data = data.get("filenames_data", []) # filenameとthumbnail_filenameのペアを受け取る
     quality = data.get("quality", "")
     comment = data.get("comment", [])
     photographer_id = current_photographer.id
 
-    if not group_id or not filenames:
+    if not group_id or not filenames_data:
         return JSONResponse(status_code=400, content={"error": "Invalid params"})
 
     try:
         images = []
-        for fn in filenames:
-            # Ensure the file exists and belongs to this user before finalizing
-            file = fs.find_one({"filename": fn, "photographer_id": photographer_id, "temporary": True})
+        for item_data in filenames_data:
+            full_filename = item_data.get("filename")
+            thumbnail_filename = item_data.get("thumbnail_filename")
+
+            # フルサイズ画像をtemporary: Falseに更新
+            file = fs.find_one({"filename": full_filename, "photographer_id": photographer_id, "temporary": True})
             if file:
                 db.fs.files.update_one({"_id": file._id}, {"$set": {"temporary": False}})
-                images.append({"filename": fn, "file_id": str(file._id)})
+                images.append({"filename": full_filename, "thumbnail_filename": thumbnail_filename, "file_id": str(file._id)})
+            
+            # サムネイル画像をtemporary: Falseに更新
+            thumb_file = fs.find_one({"filename": thumbnail_filename, "photographer_id": photographer_id, "temporary": True})
+            if thumb_file:
+                db.fs.files.update_one({"_id": thumb_file._id}, {"$set": {"temporary": False}})
 
         if not images:
              return JSONResponse(status_code=404, content={"error": "登録対象の画像が見つかりませんでした。"})

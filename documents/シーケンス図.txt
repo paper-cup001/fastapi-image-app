@@ -57,22 +57,24 @@ sequenceDiagram
         User->>Front: 「撮影」ボタン押下
         Front->>Front: カメラ起動・画像選択
         Front->>API: POST /photographer/temp_upload (画像, group_id) (Cookie認証)
-        API->>API: 画像処理
-        API->>GridFS: 一時保存(temporary: true, photographer_id)
-        API->>Front: サムネイル(base64), filename返却
+        API->>API: EXIF回転処理
+        API->>API: (必要に応じて)画像処理
+        API->>API: サムネイル生成
+        API->>GridFS: フルサイズ画像とサムネイル画像を一時保存(temporary: true, photographer_id)
+        API->>Front: サムネイル(base64), フルサイズ画像ファイル名, サムネイル画像ファイル名返却
         Front->>Front: サムネイル表示
     end
 
     User->>Front: 「取り消し」ボタン押下
     Front->>API: POST /photographer/temp_delete (group_id) (Cookie認証)
-    API->>GridFS: 該当ユーザーの直近一時ファイルを削除
+    API->>GridFS: 該当ユーザーの直近一時フルサイズ画像とサムネイル画像を削除
     API->>Front: 削除完了通知
     Front->>Front: サムネイル更新
 
     User->>Front: 「撮影終了」ボタン押下
-    Front->>API: POST /photographer/finalize_upload (group_id, filenames[], quality, comment) (Cookie認証)
-    API->>GridFS: temporary→falseに更新
-    API->>DB: imagesコレクションに本登録
+    Front->>API: POST /photographer/finalize_upload (group_id, filenames_data[], quality, comment) (Cookie認証)
+    API->>GridFS: フルサイズ画像とサムネイル画像のtemporary→falseに更新
+    API->>DB: imagesコレクションに本登録 (filename, thumbnail_filenameを保存)
     API->>Front: 登録完了通知
     Front->>Front: UI初期化
 end
@@ -135,9 +137,10 @@ sequenceDiagram
     Front->>Front: 受け取ったJSONを元にフォルダ一覧を動的生成
 
     Admin->>Front: 特定のフォルダをクリック
-    Front->>API: GET /admin/search?group_id=... (Cookie認証)
-    API->>DB: 該当グループの商品一覧を検索
-    API->>Front: 商品一覧(HTML)を返却
+    Front->>API: GET /admin/api/items?group_id=... (Cookie認証)
+    API->>DB: 該当グループの商品一覧を検索 (サムネイルファイル名を取得)
+    API->>GridFS: サムネイル画像を取得
+    API->>Front: 商品一覧(HTML)を返却 (サムネイル画像埋め込み)
     Front->>Front: 画面を商品一覧に切り替え
 
     Note over Admin, DB: 詳細表示、削除、統計表示などのフローは、

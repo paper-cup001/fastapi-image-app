@@ -231,8 +231,13 @@
           processData: false,
           contentType: false,
           success: function (data) {
-            if (data.thumbnail) {
-              thumbnails.push(data);
+            if (data.thumbnail && data.filename && data.thumbnail_filename) {
+              thumbnails.push({
+                thumbnail: data.thumbnail,
+                filename: data.filename,
+                thumbnail_filename: data.thumbnail_filename,
+                is_scaled_down: data.is_thumbnail_scaled_down // フラグを保存
+              });
               updateThumbnails();
               if (thumbnails.length >= 10) {
                 $('#shoot-btn').prop('disabled', true);
@@ -280,10 +285,10 @@
           comments.push($(this).val());
         });
 
-        var filenames = [];
-        for(var i=0; i<thumbnails.length; i++) {
-            filenames.push(thumbnails[i].filename);
-        }
+        const filenames_data = thumbnails.map(t => ({
+          filename: t.filename,
+          thumbnail_filename: t.thumbnail_filename
+        }));
 
         $.ajax({
           url: '/photographer/finalize_upload',
@@ -291,7 +296,7 @@
           contentType: 'application/json',
           data: JSON.stringify({
             group_id: groupId,
-            filenames: filenames,
+            filenames_data: filenames_data, // filenamesからfilenames_dataに変更
             quality: $('#quality').val(),
             comment: comments
           }),
@@ -327,11 +332,15 @@
         var reversedThumbnails = thumbnails.slice().reverse();
         for(var i=0; i<reversedThumbnails.length; i++) {
             var t = reversedThumbnails[i];
-            $('#thumbnails').append('<div class="col-12 col-md-6 mb-3"><img src="data:image/jpeg;base64,' + t.thumbnail + '" class="img-thumbnail"></div>');
+            const scaledMessage = t.is_scaled_down ? '<p class="text-warning small mt-1">※サムネイルは縮小されています</p>' : '';
+            $('#thumbnails').append(`
+              <div class="col-12 col-md-6 mb-3">
+                <img src="data:image/jpeg;base64,${t.thumbnail}" class="img-thumbnail">
+                ${scaledMessage}
+              </div>
+            `);
         }
       }
-
-    });
   </script>
 
   <script>

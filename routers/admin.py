@@ -178,8 +178,9 @@ async def get_items_for_group(request: Request, group_id: str, current_operator:
     results = list(collection.find(query).sort("created_at", -1))
     
     for doc in results:
-        if doc.get("images") and doc["images"][0].get("filename"):
-            file = fs.find_one({"filename": doc["images"][0]["filename"]})
+        if doc.get("images") and doc["images"][0].get("thumbnail_filename"):
+            # サムネイルファイル名を使ってサムネイル画像を取得
+            file = fs.find_one({"filename": doc["images"][0]["thumbnail_filename"]})
             doc["thumbnail_base64"] = base64.b64encode(file.read()).decode() if file else None
         else:
             doc["thumbnail_base64"] = None

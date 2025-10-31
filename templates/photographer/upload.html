@@ -434,11 +434,11 @@
               cv.imshow(canvas, croppedImage);
               $('#resolution-display').text(`${croppedImage.cols}x${croppedImage.rows}`);
               canvas.toBlob(function(blob) {
-                const croppedFile = new File([blob], file.name, { type: 'image/png' });
+                const croppedFile = new File([blob], file.name, { type: 'image/jpeg' });
                 uploadImage(croppedFile);
                 const imshowBlobEndTime = performance.now(); // End imshow/blob timer (inside async callback)
                 console.log('cv.imshow and canvas.toBlob time:', (imshowBlobEndTime - imshowBlobStartTime).toFixed(2), 'ms');
-              }, 'image/png');
+              }, 'image/jpeg', 0.9);
 
               croppedImage.delete();
             } else {
@@ -476,102 +476,119 @@
         processData: false,
         contentType: false,
         success: function (data) {
-          if (data.thumbnail) {
-            thumbnails.push(data);
-            updateThumbnails();
-            if (thumbnails.length >= 10) {
-              $('#shoot-btn').prop('disabled', true);
-            }
-          }
-          if (data.test_mode === true) {
-            alert('このウェブアプリは試用モードであるため、あなたの画像は保存されません。');
-          }
-          checkAdminDeleteAndResetIfNeeded();
-        },
-        error: function () {
-          alert('❌ 撮影エラー');
-          checkAdminDeleteAndResetIfNeeded();
-        }
-      });
-    }
-
-    $('#cancel-btn').on('click', function () {
-      if (thumbnails.length === 0) return;
-      $.ajax({
-        url: '/photographer/temp_delete',
-        type: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify({ group_id: groupId }),
-        success: function (res) {
-          thumbnails.pop();
-          updateThumbnails();
-          $('#shoot-btn').prop('disabled', thumbnails.length >= 10);
-          $('#resolution-display').text('');
-          checkAdminDeleteAndResetIfNeeded();
-        },
-        error: function () {
-          alert('画像の削除に失敗しました');
-          checkAdminDeleteAndResetIfNeeded();
-        }
-      });
-    });
-
-    $('#finish-btn').on('click', function () {
-      if (thumbnails.length === 0) {
-        alert('❌ 画像がありません');
-        return;
-      }
-      const comments = [];
-      $('#collapseQualityComment input[type=checkbox]:checked').each(function() {
-        comments.push($(this).val());
-      });
-
-      $.ajax({
-        url: '/photographer/finalize_upload',
-        type: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify({
-          group_id: groupId,
-          filenames: thumbnails.map(t => t.filename),
-          quality: $('#quality').val(),
-          comment: comments
-        }),
-        success: function (res) {
-          if (res && res.success === false && res.message) {
-            alert(res.message);
-          } else {
-            alert(thumbnails.length + '枚の画像を登録しました');
-          }
-          thumbnails = [];
-          updateThumbnails();
-          $('#shoot-section').hide();
-          $('#shoot-controls').hide();
-          $('#start-new').show();
-          $('#quality').val('0');
-          $('.accordion-body input[type=checkbox]').prop('checked', false);
-          $('#resolution-display').text('');
-          checkAdminDeleteAndResetIfNeeded();
-        },
-        error: function (xhr) {
-          let msg = '❌ 登録エラー';
-          if (xhr.responseJSON && xhr.responseJSON.error) {
-            msg = xhr.responseJSON.error;
-          }
-          alert(msg);
-          checkAdminDeleteAndResetIfNeeded();
-        }
-      });
-    });
-
-    function updateThumbnails() {
-      $('#thumbnails').empty();
-      thumbnails.slice().reverse().forEach(t => {
-        $('#thumbnails').append(`<div class="col-12 col-md-6"><img src="data:image/jpeg;base64,${t.thumbnail}" class="img-thumbnail"></div>`);
-      });
-    }
-
-    }); // End of $(document).ready()
-  </script>
+                    if (data.thumbnail && data.filename && data.thumbnail_filename) {
+                      thumbnails.push({
+                        thumbnail: data.thumbnail,
+                        filename: data.filename,
+                        thumbnail_filename: data.thumbnail_filename,
+                        is_scaled_down: data.is_thumbnail_scaled_down // フラグを保存
+                      });
+                      updateThumbnails();
+                      if (thumbnails.length >= 10) {
+                        $('#shoot-btn').prop('disabled', true);
+                      }
+                    }
+                    if (data.test_mode === true) {
+                      alert('このウェブアプリは試用モードであるため、あなたの画像は保存されません。');
+                    }
+                    checkAdminDeleteAndResetIfNeeded();
+                  },
+                  error: function () {
+                    alert('❌ 撮影エラー');
+                    checkAdminDeleteAndResetIfNeeded();
+                  }
+                });
+              }
+          
+              $('#cancel-btn').on('click', function () {
+                if (thumbnails.length === 0) return;
+                $.ajax({
+                  url: '/photographer/temp_delete',
+                  type: 'POST',
+                  contentType: 'application/json',
+                  data: JSON.stringify({ group_id: groupId }),
+                  success: function (res) {
+                    thumbnails.pop();
+                    updateThumbnails();
+                    $('#shoot-btn').prop('disabled', thumbnails.length >= 10);
+                    $('#resolution-display').text('');
+                    checkAdminDeleteAndResetIfNeeded();
+                  },
+                  error: function () {
+                    alert('画像の削除に失敗しました');
+                    checkAdminDeleteAndResetIfNeeded();
+                  }
+                });
+              });
+          
+              $('#finish-btn').on('click', function () {
+                if (thumbnails.length === 0) {
+                  alert('❌ 画像がありません');
+                  return;
+                }
+                const comments = [];
+                $('#collapseQualityComment input[type=checkbox]:checked').each(function() {
+                  comments.push($(this).val());
+                });
+          
+                const filenames_data = thumbnails.map(t => ({
+                  filename: t.filename,
+                  thumbnail_filename: t.thumbnail_filename
+                }));
+          
+                $.ajax({
+                  url: '/photographer/finalize_upload',
+                  type: 'POST',
+                  contentType: 'application/json',
+                  data: JSON.stringify({
+                    group_id: groupId,
+                    filenames_data: filenames_data, // filenamesからfilenames_dataに変更
+                    quality: $('#quality').val(),
+                    comment: comments
+                  }),
+                  success: function (res) {
+                    if (res && res.success === false && res.message) {
+                      alert(res.message);
+                    }
+                    else {
+                      alert(thumbnails.length + '枚の画像を登録しました');
+                    }
+                    thumbnails = [];
+                    updateThumbnails();
+                    $('#shoot-section').hide();
+                    $('#shoot-controls').hide();
+                    $('#start-new').show();
+                    $('#quality').val('0');
+                    $('.accordion-body input[type=checkbox]').prop('checked', false);
+                    $('#resolution-display').text('');
+                    checkAdminDeleteAndResetIfNeeded();
+                  },
+                  error: function (xhr) {
+                    let msg = '❌ 登録エラー';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                      msg = xhr.responseJSON.error;
+                    }
+                    alert(msg);
+                    checkAdminDeleteAndResetIfNeeded();
+                  }
+                });
+              });
+          
+              function updateThumbnails() {
+                $('#thumbnails').empty();
+                thumbnails.slice().reverse().forEach(t => {
+                  const scaledMessage = t.is_scaled_down ? '<p class="text-warning small mt-1">※サムネイルは縮小されています</p>' : '';
+                  $('#thumbnails').append(`
+                    <div class="col-12 col-md-6">
+                      <img src="data:image/jpeg;base64,${t.thumbnail}" class="img-thumbnail">
+                      ${scaledMessage}
+                    </div>
+                  `);
+                });
+              }
+          
+              }); // End of $(document).ready()
+            </script>
 
   <script>
       let currentUserRole = null; // ユーザーの役割を保持する変数

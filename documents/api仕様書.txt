@@ -54,7 +54,7 @@
 
 ### 4. 画像一時アップロード
 - **POST** `/photographer/temp_upload`
-- **説明**: 画像を一時保存し、サムネイルを返す。認証トークンからユーザーIDを特定する。
+- **説明**: 画像を一時保存し、サムネイルを返す。認証トークンからユーザーIDを特定する。フルサイズ画像とサムネイル画像の両方がGridFSに一時保存される。
 - **リクエスト (multipart/form-data)**:
     - `file`: 画像ファイル
     - `group_id`: string
@@ -62,26 +62,34 @@
     ```json
     {
       "thumbnail": "<base64 string>",
-      "filename": "groupid_userid_yyyymmddhhmmssfff.png"
+      "filename": "groupid_userid_yyyymmddhhmmssfff_full.jpeg",
+      "thumbnail_filename": "groupid_userid_yyyymmddhhmmssfff_thumb.jpeg",
+      "is_thumbnail_scaled_down": true // サムネイルが縮小されたかどうか
     }
     ```
 
 ### 5. 一時画像削除
 - **POST** `/photographer/temp_delete`
-- **説明**: ログインユーザーが直近で一時保存した画像を1枚削除する。
+- **説明**: ログインユーザーが直近で一時保存したフルサイズ画像とサムネイル画像を削除する。
 - **リクエスト (application/json)**:
     - `group_id`: string
 - **レスポンス例**:
     ```json
-    {"deleted": "filename.png"}
+    {"deleted": "filename.jpeg"}
     ```
 
 ### 6. アップロード確定
 - **POST** `/photographer/finalize_upload`
-- **説明**: 一時保存画像を本登録する。
+- **説明**: 一時保存画像を本登録する。フルサイズ画像とサムネイル画像の両方の`temporary`フラグを`false`に更新する。
 - **リクエスト (application/json)**:
     - `group_id`: string
-    - `filenames`: string配列
+    - `filenames_data`: array of objects (各オブジェクトは`filename`と`thumbnail_filename`を含む)
+        ```json
+        [
+          {"filename": "full_image1.jpeg", "thumbnail_filename": "thumb_image1.jpeg"},
+          {"filename": "full_image2.jpeg", "thumbnail_filename": "thumb_image2.jpeg"}
+        ]
+        ```
     - `quality`: string
     - `comment`: string配列
 - **レスポンス例**:
@@ -123,20 +131,29 @@
             {
               "_id": "GROUP_001",
               "item_count": 15,
-              "last_updated": "2025-10-29T12:30:00Z"
+              "last_updated": "2025-10-30T12:30:00Z",
+              "first_created": "2025-10-29T10:00:00Z"
             },
-            {
-              "_id": "GROUP_002",
-              "item_count": 8,
-              "last_updated": "2025-10-28T18:00:00Z"
-            }
+            ...
           ]
         }
         ```
     - **`group_id`指定の場合 (HTML)**: そのグループIDに所属する画像一覧ページのHTMLを返す。
 
-### 11. その他管理機能
-- `/admin/detail/{item_id}`: 画像詳細ページ(HTML)
+### 11. グループ一覧データ取得API
+- **GET** `/admin/api/groups`
+- **説明**: グループIDの一覧と各アイテム数をJSON形式で返す。管理画面のフォルダ表示に使用される。
+- **レスポンス**: `/admin/search`のパラメータなしの場合と同様。
+
+### 12. グループ内アイテム一覧取得API
+- **GET** `/admin/api/items`
+- **説明**: 指定された`group_id`に所属するアイテム一覧を部分HTML形式で返す。各アイテムのサムネイル画像データがBase64エンコードされて含まれる。
+- **クエリパラメータ**:
+    - `group_id`: string (必須)
+- **レスポンス**: `templates/admin/_search_results.html`のレンダリング結果。
+
+### 13. その他管理機能
+- `/admin/detail/{item_id}`: 画像詳細ページ(HTML)。詳細表示時にはフルサイズ画像が読み込まれる。
 - `/admin/delete/{item_id}`: 画像削除処理
 - `/admin/statistics`: 統計情報ページ(HTML)
 - `/admin/force_reset`: 仮登録データ初期化ページ(HTML)と初期化処理
