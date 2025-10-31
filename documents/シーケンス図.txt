@@ -1,4 +1,34 @@
-## ログイン・ログアウト (共通)
+## ログイン・ログアウト (APIクライアント)
+
+```mermaid
+sequenceDiagram
+    participant Client as APIクライアント(curl等)
+    participant API as FastAPIサーバー
+    participant DB as データベース
+
+    Client->>API: POST /api/v1/login/token (username, password)
+    API->>DB: ユーザー検索・パスワード検証
+    alt 認証成功
+        API->>API: JWT(アクセストークン)生成
+        API->>Client: 200 OK, JSON {access_token, token_type}
+    else 認証失敗
+        API->>Client: 401 Unauthorized
+    end
+
+    Client->>Client: レスポンスからaccess_tokenを保存
+
+    Client->>API: GET /admin/api/groups (Header: "Authorization: Bearer <token>")
+    API->>API: Authorizationヘッダーからトークン検証
+    alt トークン有効
+        API->>DB: 要求されたデータを検索
+        API->>Client: 200 OK, JSON {groups: [...]}
+    else トークン無効/なし
+        API->>Client: 401 Unauthorized
+    end
+end
+```
+
+---
 
 ```mermaid
 sequenceDiagram

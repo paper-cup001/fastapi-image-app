@@ -1,15 +1,17 @@
 # API仕様書
 
-**最終更新日: 2025/10/29**
+**最終更新日: 2025/10/31**
 
 ---
 
 ## 認証
 
-本APIのほとんどのエンドポイントは、認証を必要とします。
-クライアントは `/token` エンドポイントで取得したJWTを、以降のリクエストでHTTPOnlyクッキー (`access_token`) に含めて送信する必要があります。
+本APIのエンドポイントは、アクセス方法に応じて2種類の認証方式に対応しています。
 
-### 1. 認証トークン取得とリダイレクト
+- **ブラウザからのアクセス:** クッキーベースの認証
+- **APIクライアントからのアクセス:** Bearerトークン認証
+
+### 1. ブラウザ用: 認証とリダイレクト
 - **POST** `/token`
 - **説明**: ユーザー名（メールアドレス）とパスワードで認証し、成功した場合はユーザーの役割に応じたダッシュボードページへリダイレクトする。認証トークンはHTTPOnlyのクッキーにセットされる。
 - **リクエスト (application/x-www-form-urlencoded)**:
@@ -17,7 +19,22 @@
     - `password`: string
 - **レスポンス**: 認証成功時、HTTP 303 See Other でリダイレクト。失敗時は `/login` ページへエラーメッセージ付きでリダイレクト。
 
-### 2. ログアウト
+### 2. APIクライアント用: Bearerトークン取得
+- **POST** `/api/v1/login/token`
+- **説明**: ユーザー名とパスワードで認証し、APIへのアクセスに使用するBearerトークンを返す。
+- **リクエスト (application/x-www-form-urlencoded)**:
+    - `username`: string (メールアドレス)
+    - `password`: string
+- **レスポンス (application/json)**:
+    ```json
+    {
+      "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "token_type": "bearer"
+    }
+    ```
+- **利用方法**: このエンドポイントで取得した `access_token` を、以降のAPIリクエストの `Authorization` ヘッダーに `Bearer <トークン>` の形式で含める必要があります。
+
+### 3. ログアウト
 - **POST** `/logout`
 - **説明**: ユーザーをログアウトさせ、ログインページへリダイレクトする。HTTPOnlyの`access_token`クッキーは削除される。
 - **リクエストボディ**: なし
@@ -29,7 +46,7 @@
 
 **【権限】: `system_admin`**
 
-### 2.1 ログインユーザー情報取得 (システム管理者)
+### 4. ログインユーザー情報取得 (システム管理者)
 - **GET** `/system_admin/users/me`
 - **説明**: 現在ログインしているシステム管理者のユーザー情報を返す。
 - **レスポンス**: `/photographer/users/me` と同様。
@@ -40,7 +57,7 @@
 
 **【権限】: `photographer` または `operator`**
 
-### 3. ログインユーザー情報取得
+### 5. ログインユーザー情報取得
 - **GET** `/photographer/users/me`
 - **説明**: 現在ログインしている撮影者または運営者のユーザー情報を返す。
 - **レスポンス例**:
@@ -53,7 +70,7 @@
     }
     ```
 
-### 4. 画像一時アップロード
+### 6. 画像一時アップロード
 - **POST** `/photographer/temp_upload`
 - **説明**: 画像を一時保存し、サムネイルを返す。認証トークンからユーザーIDを特定する。フルサイズ画像とサムネイル画像の両方がGridFSに一時保存される。
 - **リクエスト (multipart/form-data)**:
@@ -69,7 +86,7 @@
     }
     ```
 
-### 5. 一時画像削除
+### 7. 一時画像削除
 - **POST** `/photographer/temp_delete`
 - **説明**: ログインユーザーが直近で一時保存したフルサイズ画像とサムネイル画像を削除する。
 - **リクエスト (application/json)**:
@@ -79,7 +96,7 @@
     {"deleted": "filename.jpeg"}
     ```
 
-### 6. アップロード確定
+### 8. アップロード確定
 - **POST** `/photographer/finalize_upload`
 - **説明**: 一時保存画像を本登録する。フルサイズ画像とサムネイル画像の両方の`temporary`フラグを`false`に更新する。
 - **リクエスト (application/json)**:
@@ -104,22 +121,22 @@
 
 **【権限】: `operator`**
 
-### 7. ログインユーザー情報取得 (管理者)
+### 9. ログインユーザー情報取得 (管理者)
 - **GET** `/admin/users/me`
 - **説明**: 現在ログインしている運営者のユーザー情報を返す。
 - **レスポンス**: `/photographer/users/me` と同様。
 
-### 8. 撮影者アカウント管理
+### 10. 撮影者アカウント管理
 - **GET** `/admin/manage-photographers`: 管理ページ(HTML)を返す。
-- **GET** `/admin/photographers`: 撮影者一覧(JSON)を返す。
-- **POST** `/admin/photographers`: 新規撮影者を作成する。
-- **DELETE** `/admin/photographers/{user_id}`: 撮影者を削除する。
+- **GET** `/admin/api/photographers`: 撮影者一覧(JSON)を返す。
+- **POST** `/admin/api/photographers`: 新規撮影者を作成する。
+- **DELETE** `/admin/api/photographers/{user_id}`: 撮影者を削除する。
 
-### 9. QRコード生成
+### 11. QRコード生成
 - **GET** `/admin/generate_qr`: 生成ページ(HTML)を返す。
 - **POST** `/admin/generate_qr`: QRコードを生成してHTML内に表示する。
 
-### 10. 登録画像の階層的検索
+### 12. 登録画像の階層的検索
 - **GET** `/admin/search`
 - **説明**: 登録画像をグループIDの階層で検索・表示する。クエリパラメータの有無でレスポンス形式が変わる。
 - **クエリパラメータ (任意)**:
@@ -141,19 +158,19 @@
         ```
     - **`group_id`指定の場合 (HTML)**: そのグループIDに所属する画像一覧ページのHTMLを返す。
 
-### 11. グループ一覧データ取得API
+### 13. グループ一覧データ取得API
 - **GET** `/admin/api/groups`
 - **説明**: グループIDの一覧と各アイテム数をJSON形式で返す。管理画面のフォルダ表示に使用される。
 - **レスポンス**: `/admin/search`のパラメータなしの場合と同様。
 
-### 12. グループ内アイテム一覧取得API
+### 14. グループ内アイテム一覧取得API
 - **GET** `/admin/api/items`
 - **説明**: 指定された`group_id`に所属するアイテム一覧を部分HTML形式で返す。各アイテムのサムネイル画像データがBase64エンコードされて含まれる。
 - **クエリパラメータ**:
     - `group_id`: string (必須)
 - **レスポンス**: `templates/admin/_search_results.html`のレンダリング結果。
 
-### 13. その他管理機能
+### 15. その他管理機能
 - `/admin/detail/{item_id}`: 画像詳細ページ(HTML)。詳細表示時にはフルサイズ画像が読み込まれる。
 - `/admin/delete/{item_id}`: 画像削除処理
 - `/admin/statistics`: 統計情報ページ(HTML)
@@ -165,6 +182,14 @@
 
 ## 外部システム向けエンドポイント `/external_api`
 
-（変更なし）
+**【権限】: `operator` または `photographer` または `system_admin` (要Bearerトークン)**
+
+### 16. 画像取得
+- **GET** `/external_api/images/{filename}`
+- **説明**: GridFSに保存された画像ファイルを、ファイル名を指定して取得する。
+- **レスポンス**: `image/jpeg` 形式の画像データ
+
+(※その他の外部向けエンドポイントも同様にBearerトークン認証が必要です)
+
 
 ---

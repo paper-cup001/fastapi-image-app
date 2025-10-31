@@ -136,12 +136,22 @@ Fly.ioへのFastAPI + MongoDB Atlasデプロイ手順
     flyctl secrets set MONGO_URL="mongodb+srv://<your-username>:<your-password>@cluster0.xxxxx.mongodb.net/..."
     ```
 
-4.  **デプロイの実行**:
+4.  **認証用SECRET_KEYの設定**:
+    以下のコマンドで、JWTの署名に使用する強力な秘密鍵を生成し、それをFly.ioのSecretに設定します。**このキーは絶対に外部に漏らさないでください。**
+    ```bash
+    # 強力な秘密鍵を生成 (ローカルで実行)
+    openssl rand -hex 32
+
+    # 生成されたキーを設定 (例: flyctl secrets set SECRET_KEY="生成された長い文字列")
+    flyctl secrets set SECRET_KEY="YOUR_GENERATED_SECRET_KEY"
+    ```
+
+5.  **デプロイの実行**:
     ```bash
     flyctl deploy
     ```
 
-5.  **デプロイの確認とアクセス**:
+6.  **デプロイの確認とアクセス**:
     ```bash
     flyctl status
     flyctl logs

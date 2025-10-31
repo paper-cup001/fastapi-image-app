@@ -1,4 +1,5 @@
 from fastapi import Depends, HTTPException, status, Request
+from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from pymongo.database import Database
 
@@ -7,34 +8,58 @@ from schemas import TokenData, User
 from crud.user_crud import get_user_by_email
 from db import db # データベースオブジェクトをインポート
 
+# API用の認証スキーム。トークンURLは後で作成するエンドポイントを指す
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/login/token", auto_error=False)
+
 # 未ログイン時にリダイレクトを発生させるためのカスタム例外
 class NotLoggedInException(Exception):
     pass
 
-async def get_current_user(request: Request, db: Database = Depends(lambda: db)) -> User:
+async def get_current_user(
+    request: Request, 
+    token: str = Depends(oauth2_scheme), 
+    db: Database = Depends(lambda: db)
+) -> User:
     """
-    リクエストのクッキーからJWTを抽出し、現在のユーザーを返す。
-    認証に失敗した場合は、NotLoggedInExceptionを発生させる。
+    リクエストからJWTを抽出し、現在のユーザーを返す。
+    認証は2つの方法を試みる:
+    1. AuthorizationヘッダーのBearerトークン（APIクライアント用）
+    2. 'access_token'クッキー（ブラウザ用）
+    認証に失敗した場合は、適切な例外を発生させる。
     """
-    try:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    # 1. Bearerトークンを試す
+    if token is None:
+        # 2. Bearerトークンがなければ、クッキーを試す
         token = request.cookies.get("access_token")
+        # クッキーもない場合は、ブラウザ用のリダイレクト例外を発生
         if token is None:
             raise NotLoggedInException()
 
+    try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
         if email is None:
-            raise NotLoggedInException()
+            # トークンは存在するがペイロードが不正な場合
+            # APIからのアクセスの場合はcredentials_exception、ブラウザからの場合はNotLoggedInException
+            is_api_call = "authorization" in request.headers
+            raise credentials_exception if is_api_call else NotLoggedInException()
 
-    except (JWTError, NotLoggedInException):
-        # トークンがない、デコードできない、ペイロードが不正、などの場合は
-        # すべて未ログイン例外として処理する
-        raise NotLoggedInException()
+    except JWTError:
+        # トークンのデコードに失敗した場合
+        is_api_call = "authorization" in request.headers
+        raise credentials_exception if is_api_call else NotLoggedInException()
 
     user = get_user_by_email(db, email=email)
     if user is None:
         # トークンは有効だが、該当するユーザーがDBに存在しない場合
-        raise NotLoggedInException()
+        is_api_call = "authorization" in request.headers
+        raise credentials_exception if is_api_call else NotLoggedInException()
     
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")

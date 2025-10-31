@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Form
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import RedirectResponse
 from pymongo.database import Database
 from datetime import timedelta
@@ -6,9 +7,39 @@ from datetime import timedelta
 from auth import verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 from crud.user_crud import get_user_by_email
 from db import db
-from schemas import User
+from schemas import User, Token
 
 router = APIRouter()
+
+# --- API Client Authentication ---
+
+@router.post("/api/v1/login/token", response_model=Token)
+async def login_for_api(
+    form_data: OAuth2PasswordRequestForm = Depends(), 
+    db: Database = Depends(lambda: db)
+):
+    """
+    APIクライアント用のトークン発行エンドポイント。
+    ユーザー名とパスワードで認証し、アクセストークンをJSONで返す。
+    """
+    user = get_user_by_email(db, email=form_data.username)
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.email},
+        expires_delta=access_token_expires
+    )
+    
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+# --- Web Browser Authentication ---
 
 @router.post("/token")
 async def login_for_access_token(response: Response, username: str = Form(...), password: str = Form(...), db: Database = Depends(lambda: db)):
