@@ -14,12 +14,7 @@ app = FastAPI()  # ← この行がないとエラーになる（エントリー
 # ★ 未ログイン例外のハンドラを登録
 @app.exception_handler(NotLoggedInException)
 async def not_logged_in_exception_handler(request: Request, exc: NotLoggedInException):
-    # アクセスしようとしたパスに応じて、適切なログインページにリダイレクトする
-    if request.url.path.startswith("/admin"):
-        return RedirectResponse(url="/login")
-    elif request.url.path.startswith("/photographer"):
-        return RedirectResponse(url="/photographer/login")
-    # デフォルトのフォールバック
+    # 未ログイン時は常に単一のログインページにリダイレクトする
     return RedirectResponse(url="/login")
 
 
@@ -31,9 +26,10 @@ os.environ["TEST_MODE"] = "true" if test_mode else "false"
 from routers import photographer  # ← routers/photographer.py を読み込む
 from routers import admin         # ← routers/admin.py を読み込む
 from routers import external_api  # ← routers/external_api.py を読み込む
-from routers import auth, pages   # ★ 新しいルーターをインポート
+from routers import auth, pages, system_admin   # ★ 新しいルーターをインポート
 
 # サブルーター登録
+app.include_router(system_admin.router, prefix="/system_admin")
 app.include_router(photographer.router, prefix="/photographer")
 app.include_router(admin.router, prefix="/admin")
 app.include_router(external_api.router, prefix="/external_api")

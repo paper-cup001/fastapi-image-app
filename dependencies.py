@@ -64,3 +64,15 @@ async def get_current_photographer(current_user: User = Depends(get_current_user
             detail="The user does not have enough privileges for this resource",
         )
     return current_user
+
+
+async def get_current_system_admin(current_user: User = Depends(get_current_user)) -> User:
+    """
+    現在のユーザーがシステム管理者（system_admin）であるかを確認する。
+    """
+    if current_user.role != "system_admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The user does not have enough privileges for this resource",
+        )
+    return current_user
