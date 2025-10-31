@@ -3,30 +3,26 @@
 ```mermaid
 sequenceDiagram
     participant User as ユーザー(ブラウザ)
-    participant Front as ログイン画面(HTML/JS)
+    participant Front as ログイン画面(HTML)
     participant API as FastAPIサーバー
 
     User->>Front: メールアドレス・パスワード入力し「ログイン」
     Front->>API: POST /token (username, password)
     API->>API: パスワード検証
     alt 認証成功
-        API->>API: JWT生成
-        API->>Front: access_token, role 返却 (Cookieにもセット)
-        Front->>Front: roleに応じてリダイレクト先を決定
-        alt role is operator
-            Front->>User: /admin/dashboard へ遷移
-        else role is photographer
-            Front->>User: /photographer/scan_qr へ遷移
-        end
+        API->>API: JWT生成 & Cookieにセット
+        API->>User: HTTP 303 Redirect (Location: /admin/dashboard or /photographer/scan_qr or /system_admin/dashboard)
+        User->>API: GET /<role>/dashboard (リダイレクトに従う)
+        API->>User: ダッシュボード画面表示
     else 認証失敗
-        API->>Front: 401 Unauthorized
-        Front->>User: エラーメッセージ表示
+        API->>User: HTTP 303 Redirect (Location: /login?error=...)
+        User->>Front: エラーメッセージ付きでログイン画面表示
     end
 
     User->>Front: 「ログアウト」ボタン押下
     Front->>API: POST /logout
-    API->>Front: Cookie削除レスポンス
-    Front->>User: ログインページへ遷移
+    API->>User: HTTP 303 Redirect (Location: /login) (Cookie削除)
+    User->>Front: ログインページ表示
 end
 ```
 

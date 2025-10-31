@@ -9,29 +9,30 @@
 本APIのほとんどのエンドポイントは、認証を必要とします。
 クライアントは `/token` エンドポイントで取得したJWTを、以降のリクエストでHTTPOnlyクッキー (`access_token`) に含めて送信する必要があります。
 
-### 1. 認証トークン取得
+### 1. 認証トークン取得とリダイレクト
 - **POST** `/token`
-- **説明**: ユーザー名（メールアドレス）とパスワードで認証し、アクセストークンを生成して返す。トークンはHTTPOnlyのクッキーにもセットされる。
+- **説明**: ユーザー名（メールアドレス）とパスワードで認証し、成功した場合はユーザーの役割に応じたダッシュボードページへリダイレクトする。認証トークンはHTTPOnlyのクッキーにセットされる。
 - **リクエスト (application/x-www-form-urlencoded)**:
     - `username`: string (メールアドレス)
     - `password`: string
-- **レスポンス例**:
-    ```json
-    {
-      "access_token": "ey...",
-      "token_type": "bearer",
-      "role": "operator" // or "photographer"
-    }
-    ```
+- **レスポンス**: 認証成功時、HTTP 303 See Other でリダイレクト。失敗時は `/login` ページへエラーメッセージ付きでリダイレクト。
 
 ### 2. ログアウト
 - **POST** `/logout`
-- **説明**: ユーザーをログアウトさせる。HTTPOnlyの`access_token`クッキーを削除する。
+- **説明**: ユーザーをログアウトさせ、ログインページへリダイレクトする。HTTPOnlyの`access_token`クッキーは削除される。
 - **リクエストボディ**: なし
-- **レスポンス例**:
-    ```json
-    {"message": "Logout successful"}
-    ```
+- **レスポンス**: HTTP 303 See Other で `/login` へリダイレクト。
+
+---
+
+## システム管理者向けエンドポイント `/system_admin`
+
+**【権限】: `system_admin`**
+
+### 2.1 ログインユーザー情報取得 (システム管理者)
+- **GET** `/system_admin/users/me`
+- **説明**: 現在ログインしているシステム管理者のユーザー情報を返す。
+- **レスポンス**: `/photographer/users/me` と同様。
 
 ---
 
