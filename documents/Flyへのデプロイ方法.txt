@@ -4,7 +4,7 @@ Fly.ioへのFastAPI + MongoDB Atlasデプロイ手順
 
 1.  MongoDB Atlas のセットアップ
 2.  FastAPI アプリケーションの準備
-3.  Fly.io へのデプロイ
+3.  Fly.io へのデプロイと初期設定
 
 ---
 
@@ -35,33 +35,25 @@ Fly.ioへのFastAPI + MongoDB Atlasデプロイ手順
 
 ### ステップ2: FastAPI アプリケーションの準備
 
-1.  **`db.py` の修正**:
-    データベース接続文字列を環境変数から読み込むように変更します。
+1.  **`db.py` の確認**:
+    データベース接続文字列が環境変数から読み込まれる設定になっていることを確認します。
 
     ```python
     # db.py
-    from pymongo import MongoClient
-    import gridfs
     import os
-
-    # Fly.ioのSecretに設定した環境変数 MONGO_URL を読み込む
     MONGO_URL = os.environ.get("MONGO_URL")
-
-    client = MongoClient(MONGO_URL)
-    db = client["image_db"]
-    collection = db["images"]
-    fs = gridfs.GridFS(db)
+    # ... 以下略
     ```
 
 2.  **`requirements.txt`への`gunicorn`の追加**:
-    `gunicorn`を`documents/requirements.txt`に追加します。
+    `gunicorn`が`documents/requirements.txt`に含まれていることを確認します。
 
 3.  **Dockerfileの作成**:
     プロジェクトのルートに以下の内容で`Dockerfile`を作成します。
 
     ```Dockerfile
     # Pythonの公式イメージをベースにする
-    FROM python:3.10-slim
+    FROM python:3.11-slim
 
     # 作業ディレクトリを設定
     WORKDIR /app
@@ -83,35 +75,11 @@ Fly.ioへのFastAPI + MongoDB Atlasデプロイ手順
     ```
 
 4.  **`.dockerignore` ファイルの作成**:
-    プロジェクトのルートに以下の内容で`.dockerignore`を作成します。
-
-    ```
-    # Git
-    .git
-    .gitignore
-
-    # Docker
-    .dockerignore
-    Dockerfile
-
-    # Python
-    __pycache__/
-    *.pyc
-    *.pyo
-    *.pyd
-    .Python
-    .venv/
-    env/
-    venv/
-
-    # その他
-    .idea/
-    .vscode/
-    ```
+    プロジェクトのルートに`.dockerignore`ファイルが存在することを確認します。
 
 ---
 
-### ステップ3: Fly.io へのデプロイ
+### ステップ3: Fly.io へのデプロイと初期設定
 
 1.  **flyctlのインストールとログイン**:
     ```bash
@@ -151,18 +119,14 @@ Fly.ioへのFastAPI + MongoDB Atlasデプロイ手順
     flyctl deploy
     ```
 
-6.  **デプロイの確認とアクセス**:
-    ```bash
-    flyctl status
-    flyctl logs
-    flyctl open
-    ```
+6.  **デプロイの確認**:
+    `flyctl status` コマンドでデプロイが成功したことを確認します。
 
 ---
 
-### ステップ4: 初回システム管理者の作成
+### ステップ4: 初回管理者アカウントの作成
 
-デプロイが成功したら、アプリケーションにログインするための最初の管理者アカウントを作成します。
+デプロイが成功したら、アプリケーションにログインするための最初の管理者アカウントを作成します。**この作業はデプロイごと、または新しい環境をセットアップするごとに必須です。**
 
 1.  **サーバーにSSHで接続**:
     以下のコマンドで、Fly.io上で動作しているアプリケーションのコンテナに接続します。
@@ -170,11 +134,19 @@ Fly.ioへのFastAPI + MongoDB Atlasデプロイ手順
     flyctl ssh console
     ```
 
-2.  **システム管理者作成コマンドの実行**:
-    SSHで接続した先のターミナルで、以下のコマンドを実行して管理者アカウントを作成します。
-    `<email>` と `<password>` は、ご自身のものに置き換えてください。
+2.  **システム管理者を作成します**:
+    SSHで接続した先のターミナルで、以下のコマンドを実行します。対話形式でメールアドレスとパスワードの入力を求められます。
     ```bash
-    python create_system_admin.py <email> <password>
+    python create_system_admin.py
     ```
+
+3.  **最初の運営者を作成します**:
+    続けて、日々の運用を行うための運営者アカウントも作成します。こちらも対話形式です。
+    ```bash
+    python create_operator.py
+    ```
+
+4.  **接続を終了します**:
+    `exit` コマンドでSSH接続を終了します。
 
 これで本番環境のデータベースに管理者アカウントが作成され、`flyctl open` で開いたページからログインできるようになります。

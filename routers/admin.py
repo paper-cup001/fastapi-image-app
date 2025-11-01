@@ -51,7 +51,8 @@ async def show_generate_qr_form(request: Request, current_operator: User = Depen
 async def generate_qr(request: Request, group_id: str = Form(...), old_phone: bool = Form(False), current_operator: User = Depends(get_current_operator)):
     local_ip = get_local_ip()
     endpoint = "upload_old.html" if old_phone else "upload.html"
-    url = f"http://{local_ip}:8000/photographer/{endpoint}?group_id={group_id}"
+    # URLに operator_id を追加
+    url = f"http://{local_ip}:8000/photographer/{endpoint}?group_id={group_id}&operator_id={current_operator.id}"
     
     qr = qrcode.make(url)
     buf = io.BytesIO()
@@ -91,6 +92,9 @@ async def force_reset_images(request: Request, current_operator: User = Depends(
 @router.get("/statistics", response_class=HTMLResponse)
 async def show_statistics(request: Request, current_operator: User = Depends(get_current_operator)):
     pipeline = [
+        {
+            "$match": { "operator_id": current_operator.id } # ログイン中の運営者のIDで絞り込み
+        },
         {"$group": {
             "_id": "$group_id",
             "uploaded_count": {"$sum": {"$cond": [{"$eq": ["$db_uploaded", True]}, 1, 0]}},
@@ -157,6 +161,9 @@ async def get_groups(current_operator: User = Depends(get_current_operator)):
     """グループ一覧と各アイテム数をJSONで返す"""
     pipeline = [
         {
+            "$match": { "operator_id": current_operator.id } # ログイン中の運営者のIDで絞り込み
+        },
+        {
             "$group": {
                 "_id": "$group_id",
                 "item_count": {"$sum": 1},
@@ -174,7 +181,10 @@ async def get_groups(current_operator: User = Depends(get_current_operator)):
 @router.get("/api/items", response_class=HTMLResponse)
 async def get_items_for_group(request: Request, group_id: str, current_operator: User = Depends(get_current_operator)):
     """指定されたgroup_idに所属するアイテム一覧をHTMLで返す"""
-    query = {"group_id": group_id}
+    query = {
+        "group_id": group_id,
+        "operator_id": current_operator.id # ログイン中の運営者のIDで絞り込み
+    }
     results = list(collection.find(query).sort("created_at", -1))
     
     for doc in results:
@@ -197,7 +207,7 @@ async def get_items_for_group(request: Request, group_id: str, current_operator:
 
 @router.get("/api/photographers", response_model=List[User])
 async def get_all_photographers(current_operator: User = Depends(get_current_operator)):
-    return user_crud.get_photographers(db)
+    return user_crud.get_photographers(db, operator_id=current_operator.id)
 
 @router.post("/api/photographers", response_model=User, status_code=status.HTTP_201_CREATED)
 async def create_new_photographer(user: UserCreate, current_operator: User = Depends(get_current_operator)):
@@ -206,14 +216,19 @@ async def create_new_photographer(user: UserCreate, current_operator: User = Dep
         raise HTTPException(status_code=400, detail="Email already registered")
     if user.role != 'photographer':
         raise HTTPException(status_code=400, detail="Role must be 'photographer'")
-    return user_crud.create_user(db=db, user=user)
+    return user_crud.create_user(db=db, user=user, creator_id=current_operator.id)
 
 @router.delete("/api/photographers/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_photographer_by_id(user_id: str, current_operator: User = Depends(get_current_operator)):
     user_to_delete = user_crud.get_user(db, user_id=user_id)
+    
+    # 権限チェック
     if not user_to_delete or user_to_delete.role != 'photographer':
         raise HTTPException(status_code=404, detail="Photographer not found")
     
+    if user_to_delete.created_by_operator_id != current_operator.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this photographer")
+
     if not user_crud.delete_user_by_id(db, user_id=user_id):
         raise HTTPException(status_code=500, detail="Failed to delete photographer")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

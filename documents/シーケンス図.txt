@@ -1,34 +1,45 @@
-## ログイン・ログアウト (APIクライアント)
+【注意】このドキュメントには、過去のバージョンのシーケンス図が含まれています。最新の機能や認証フローについては、本文書や`api仕様書.txt`の内容を優先してください。
+
+---
+
+## システム管理者による孤立データ管理
 
 ```mermaid
 sequenceDiagram
-    participant Client as APIクライアント(curl等)
+    participant Admin as システム管理者
+    participant Front as 管理画面(JS)
     participant API as FastAPIサーバー
     participant DB as データベース
+    participant GridFS as GridFS
 
-    Client->>API: POST /api/v1/login/token (username, password)
-    API->>DB: ユーザー検索・パスワード検証
-    alt 認証成功
-        API->>API: JWT(アクセストークン)生成
-        API->>Client: 200 OK, JSON {access_token, token_type}
-    else 認証失敗
-        API->>Client: 401 Unauthorized
-    end
+    Admin->>Front: 「孤立した画像グループを検索」ボタン押下
+    Front->>API: GET /system_admin/api/orphaned-image-groups
+    API->>DB: usersコレクションから全運営者IDを取得
+    API->>DB: imagesコレクションを検索 (operator_idが存在しない or 無効なID)
+    API->>Front: 孤立グループのリスト(JSON)を返却
+    Front->>Admin: 孤立グループ一覧を表示
 
-    Client->>Client: レスポンスからaccess_tokenを保存
+    Admin->>Front: 特定グループの「ダウンロード」ボタン押下
+    Note over Admin, Front: ブラウザは直接ダウンロード用URLにアクセス
+    Admin->>API: GET /system_admin/api/image-groups/download/{group_id}
+    API->>DB: 該当の孤立グループに属する画像ドキュメントを検索
+    API->>GridFS: 該当の画像ファイルを取得
+    API->>API: 取得した画像をメモリ上でZIPファイルに圧縮
+    API->>Admin: ZIPファイルをストリーミングで返却
 
-    Client->>API: GET /admin/api/groups (Header: "Authorization: Bearer <token>")
-    API->>API: Authorizationヘッダーからトークン検証
-    alt トークン有効
-        API->>DB: 要求されたデータを検索
-        API->>Client: 200 OK, JSON {groups: [...]}
-    else トークン無効/なし
-        API->>Client: 401 Unauthorized
-    end
+    Admin->>Front: 特定グループの「削除」ボタン押下
+    Front->>API: DELETE /system_admin/api/image-groups/{group_id}
+    API->>DB: 該当の孤立グループに属する画像ドキュメントを検索
+    API->>GridFS: 関連する画像ファイルをすべて削除
+    API->>DB: 該当の画像ドキュメントをすべて削除
+    API->>Front: 204 No Content
+    Front->>Front: 画面のリストを更新
 end
 ```
 
 ---
+
+## ログイン・ログアウト (ブラウザ)
 
 ```mermaid
 sequenceDiagram
@@ -41,7 +52,7 @@ sequenceDiagram
     API->>API: パスワード検証
     alt 認証成功
         API->>API: JWT生成 & Cookieにセット
-        API->>User: HTTP 303 Redirect (Location: /admin/dashboard or /photographer/scan_qr or /system_admin/dashboard)
+        API->>User: HTTP 303 Redirect (Location: /<role>/dashboard)
         User->>API: GET /<role>/dashboard (リダイレクトに従う)
         API->>User: ダッシュボード画面表示
     else 認証失敗
@@ -68,109 +79,57 @@ sequenceDiagram
     participant GridFS as MongoDB/GridFS
     participant DB as imagesコレクション
 
-    User->>Front: QRコード読み取り or URL直アクセス
-    Front->>API: GET /photographer/upload.html
+    User->>Front: QRコード読み取り (group_idとoperator_idを含むURL)
+    Front->>API: GET /photographer/upload.html?...
     API->>Front: 撮影ページHTML返却
-
-    Front->>API: GET /photographer/users/me (Cookie認証)
-    API->>Front: ユーザー情報(JSON)返却
-    Front->>Front: ユーザー名表示
-
-    User->>Front: 「新規撮影」ボタン押下
-    Front->>Front: UI切替（撮影ボタン等表示）
 
     loop 最大10回まで
         User->>Front: 「撮影」ボタン押下
-        Front->>Front: カメラ起動・画像選択
-        Front->>API: POST /photographer/temp_upload (画像, group_id) (Cookie認証)
-        API->>API: EXIF回転処理
-        API->>API: (必要に応じて)画像処理
-        API->>API: サムネイル生成
-        API->>GridFS: フルサイズ画像とサムネイル画像を一時保存(temporary: true, photographer_id)
-        API->>Front: サムネイル(base64), フルサイズ画像ファイル名, サムネイル画像ファイル名返却
+        Front->>API: POST /photographer/temp_upload (画像, group_id, operator_id)
+        API->>API: ファイル名生成 ({operator_id}_{group_id}_{...})
+        API->>GridFS: 画像を一時保存 (operator_idもメタデータに含む)
+        API->>Front: サムネイル等を返却
         Front->>Front: サムネイル表示
     end
 
-    User->>Front: 「取り消し」ボタン押下
-    Front->>API: POST /photographer/temp_delete (group_id) (Cookie認証)
-    API->>GridFS: 該当ユーザーの直近一時フルサイズ画像とサムネイル画像を削除
-    API->>Front: 削除完了通知
-    Front->>Front: サムネイル更新
-
     User->>Front: 「撮影終了」ボタン押下
-    Front->>API: POST /photographer/finalize_upload (group_id, filenames_data[], quality, comment) (Cookie認証)
-    API->>GridFS: フルサイズ画像とサムネイル画像のtemporary→falseに更新
-    API->>DB: imagesコレクションに本登録 (filename, thumbnail_filenameを保存)
+    Front->>API: POST /photographer/finalize_upload (group_id, operator_id, filenames_data[], ...)
+    API->>GridFS: 画像のtemporaryフラグをfalseに更新
+    API->>DB: imagesコレクションに本登録 (operator_idも記録)
     API->>Front: 登録完了通知
-    Front->>Front: UI初期化
 end
 ```
 
 ---
 
-## 管理者のシーケンス図
+## 運営者のシーケンス図
 
 ```mermaid
 sequenceDiagram
-    participant Admin as 管理者(ブラウザ)
+    participant Admin as 運営者(ブラウザ)
     participant Front as 管理画面(HTML/JS)
     participant API as FastAPIサーバー
-    participant DB as MongoDB(images, GridFS)
-
-    %% --- ログイン後のダッシュボード表示 ---
-    Admin->>Front: /admin/dashboard アクセス
-    Front->>API: GET /admin/dashboard (Cookie認証)
-    API->>Front: ダッシュボードHTML返却
-    Front->>API: GET /admin/users/me (Cookie認証)
-    API->>Front: ユーザー情報(JSON)返却
-    Front->>Front: ユーザー名表示
-
-    %% --- 撮影用URL/QRコード作成 ---
-    Admin->>Front: 「撮影用URL/QRコード作成」ボタン押下
-    Front->>API: GET /admin/generate_qr
-    API->>Front: QR生成画面HTML返却
-
-    Admin->>Front: group_id入力し「URL/QRコード作成」押下
-    Front->>API: POST /admin/generate_qr (group_id)
-    API->>API: QRコード生成
-    API->>Front: QR画像(base64)付きHTML返却
-
-    %% --- 運営者自身による撮影 ---
-    Admin->>Front: 「今すぐ写真撮影」ボタン押下
-    Front->>User: /photographer/upload.html?group_id=... へ遷移
-    Note right of User: 以降は撮影者のシーケンス図に合流
+    participant DB as MongoDB
 
     %% --- 撮影者アカウント管理 ---
-    Admin->>Front: 「撮影者アカウント管理」ボタン押下
-    Front->>API: GET /admin/manage-photographers
-    API->>Front: 管理ページHTML返却
-    Front->>API: GET /admin/photographers
-    API->>DB: usersコレクション検索 (role: photographer)
+    Admin->>Front: 「撮影者アカウント管理」画面表示
+    Front->>API: GET /admin/api/photographers (Cookie認証)
+    API->>DB: usersコレクション検索 (role: photographer, created_by_operator_id: ログイン中運営者のID)
     API->>Front: 撮影者リスト(JSON)返却
     Front->>Front: 一覧表示
 
-    Admin->>Front: 新規作成 or 削除
-    Front->>API: POST or DELETE /admin/photographers
-    API->>DB: usersコレクションを更新
-    API->>Front: 結果(JSON)返却
-    Front->>Front: 画面更新
-
     %% --- 登録画像の階層検索 ---
-    Admin->>Front: 「MongoDB 登録画像一覧」にアクセス
-    Front->>API: GET /admin/search (Cookie認証)
-    API->>DB: GroupID毎のアイテム数と最終更新日を検索
+    Admin->>Front: 「登録画像一覧」にアクセス
+    Front->>API: GET /admin/api/groups (Cookie認証)
+    API->>DB: imagesコレクション検索 (operator_id: ログイン中運営者のID)
     API->>Front: グループ一覧(JSON)を返却
-    Front->>Front: 受け取ったJSONを元にフォルダ一覧を動的生成
+    Front->>Front: フォルダ一覧を動的生成
 
     Admin->>Front: 特定のフォルダをクリック
     Front->>API: GET /admin/api/items?group_id=... (Cookie認証)
-    API->>DB: 該当グループの商品一覧を検索 (サムネイルファイル名を取得)
-    API->>GridFS: サムネイル画像を取得
-    API->>Front: 商品一覧(HTML)を返却 (サムネイル画像埋め込み)
+    API->>DB: imagesコレクション検索 (group_idとoperator_idで絞り込み)
+    API->>Front: 商品一覧(HTML)を返却
     Front->>Front: 画面を商品一覧に切り替え
-
-    Note over Admin, DB: 詳細表示、削除、統計表示などのフローは、
-    Note over Admin, DB: すべて認証(Cookie)を伴うAPIリクエストを介して行われる。
 end
 ```
 
@@ -178,7 +137,7 @@ end
 
 ## 外部接続のシーケンス図
 
-（変更なし）
+**【警告】** 以下のエンドポイントは、現状では複数運営者環境に対応していません。`group_id`でデータを取得する際に、他の運営者のデータが混在する可能性があります。利用には十分な注意が必要です。
 
 ```mermaid
 sequenceDiagram
@@ -186,45 +145,10 @@ sequenceDiagram
     participant API as FastAPIサーバー
     participant DB as MongoDB(images, GridFS)
 
-    %% --- 画像取得 ---
-    Ext->>API: GET /external_api/images/{filename}
-    API->>DB: GridFSから画像検索
-    alt 画像あり
-        API->>Ext: 画像データ返却(image/jpeg)
-    else 画像なし
-        API->>Ext: 404エラー(JSON)
-    end
-
-    %% --- バーコード読取 ---
-    Ext->>API: POST /external_api/barcode (画像ファイル送信)
-    API->>API: 画像からバーコード解析
-    alt バーコード検出
-        API->>Ext: JSON(バーコード情報)
-    else 検出なし
-        API->>Ext: JSON(barcodes: [])
-    end
-
-    %% --- 未処理アイテム検索 ---
     Ext->>API: GET /external_api/search_unuploaded_items?group_id=...
-    API->>DB: imagesコレクション検索(db_uploaded: false)
+    API->>DB: imagesコレクション検索(db_uploaded: false, group_id: ...)
+    Note right of API: この検索はoperator_idで絞り込まれていない！
     API->>Ext: JSON(未処理アイテム一覧)
 
-    %% --- 処理済みマーク ---
-    Ext->>API: PATCH /external_api/mark_uploaded (_id)
-    API->>DB: imagesコレクションのdb_uploadedをtrueに更新
-    alt 更新成功
-        API->>Ext: JSON(更新メッセージ)
-    else 対象なし
-        API->>Ext: 404エラー(JSON)
-    end
-
-    %% --- メタデータ更新 ---
-    Ext->>API: PATCH /external_api/update_metadata (_id, title等)
-    API->>DB: 指定_idのドキュメントを部分更新
-    alt 更新成功
-        API->>Ext: JSON(更新メッセージ)
-    else 対象なし/不正
-        API->>Ext: エラー(JSON)
-    end
 end
 ```

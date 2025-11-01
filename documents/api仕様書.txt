@@ -1,25 +1,15 @@
 # API仕様書
 
-**最終更新日: 2025/10/31**
+**最終更新日: 2025/11/01**
 
 ---
 
-## 認証
+## 1. 認証 (Authentication)
 
-本APIのエンドポイントは、アクセス方法に応じて2種類の認証方式に対応しています。
+本APIのエンドポイントは、アクセス方法に応じて2種類の認証方式に対応しています。いずれかの方法で認証されていないリクエストは、`401 Unauthorized`またはログインページへのリダイレクトを返します。
 
-- **ブラウザからのアクセス:** クッキーベースの認証
-- **APIクライアントからのアクセス:** Bearerトークン認証
+### 1.1 APIクライアント用: Bearerトークン認証
 
-### 1. ブラウザ用: 認証とリダイレクト
-- **POST** `/token`
-- **説明**: ユーザー名（メールアドレス）とパスワードで認証し、成功した場合はユーザーの役割に応じたダッシュボードページへリダイレクトする。認証トークンはHTTPOnlyのクッキーにセットされる。
-- **リクエスト (application/x-www-form-urlencoded)**:
-    - `username`: string (メールアドレス)
-    - `password`: string
-- **レスポンス**: 認証成功時、HTTP 303 See Other でリダイレクト。失敗時は `/login` ページへエラーメッセージ付きでリダイレクト。
-
-### 2. APIクライアント用: Bearerトークン取得
 - **POST** `/api/v1/login/token`
 - **説明**: ユーザー名とパスワードで認証し、APIへのアクセスに使用するBearerトークンを返す。
 - **リクエスト (application/x-www-form-urlencoded)**:
@@ -34,162 +24,86 @@
     ```
 - **利用方法**: このエンドポイントで取得した `access_token` を、以降のAPIリクエストの `Authorization` ヘッダーに `Bearer <トークン>` の形式で含める必要があります。
 
-### 3. ログアウト
-- **POST** `/logout`
-- **説明**: ユーザーをログアウトさせ、ログインページへリダイレクトする。HTTPOnlyの`access_token`クッキーは削除される。
-- **リクエストボディ**: なし
-- **レスポンス**: HTTP 303 See Other で `/login` へリダイレクト。
+### 1.2 ブラウザ用: クッキーベース認証
+- **POST** `/token`
+- **説明**: ユーザー名（メールアドレス）とパスワードで認証し、成功した場合はユーザーの役割に応じたダッシュボードページへリダイレクトする。認証トークンはHTTPOnlyのクッキーにセットされるため、ブラウザからの後続リクエストは自動的に認証される。
 
 ---
 
-## システム管理者向けエンドポイント `/system_admin`
+## 2. システム管理者向けAPI (`/system_admin/api/`)
 
 **【権限】: `system_admin`**
 
-### 4. ログインユーザー情報取得 (システム管理者)
-- **GET** `/system_admin/users/me`
-- **説明**: 現在ログインしているシステム管理者のユーザー情報を返す。
-- **レスポンス**: `/photographer/users/me` と同様。
+### 2.1 運営者アカウント管理
+- **GET** `/api/operators`
+    - **説明**: 全ての運営者アカウントのリストを返す。
+- **POST** `/api/operators`
+    - **説明**: 新しい運営者アカウントを作成する。
+    - **リクエストボディ**: `{"email": "...", "password": "...", "role": "operator"}`
+- **DELETE** `/api/operators/{user_id}`
+    - **説明**: 指定されたIDの運営者アカウントを削除する。
+
+### 2.2 孤立データ管理
+- **GET** `/api/orphaned-photographers`
+    - **説明**: 所有者(`created_by_operator_id`)がいない、または存在しない運営者に紐づく撮影者アカウントを検索して返す。
+- **PUT** `/api/photographers/{photographer_id}/assign-operator`
+    - **説明**: 孤立した撮影者アカウントに、既存の運営者を所有者として割り当てる。
+    - **リクエストボディ**: `{"operator_id": "..."}`
+- **DELETE** `/api/orphaned-photographers/{photographer_id}`
+    - **説明**: 孤立した撮影者アカウントを完全に削除する。
+- **GET** `/api/orphaned-image-groups`
+    - **説明**: 所有者(`operator_id`)がいない、または存在しない運営者に紐づく画像グループのリスト（グループIDとアイテム数）を返す。
+- **GET** `/api/image-groups/download/{group_id}`
+    - **説明**: 指定された孤立画像グループに属する全ての元画像をZIPファイルとしてダウンロードする。ZIPファイル内は、元の所有者である運営者IDごとにフォルダ分けされる。
+- **DELETE** `/api/image-groups/{group_id}`
+    - **説明**: 指定された孤立画像グループに属する全てのドキュメントと画像ファイルを完全に削除する。
 
 ---
 
-## 撮影者・運営者共通エンドポイント `/photographer`
-
-**【権限】: `photographer` または `operator`**
-
-### 5. ログインユーザー情報取得
-- **GET** `/photographer/users/me`
-- **説明**: 現在ログインしている撮影者または運営者のユーザー情報を返す。
-- **レスポンス例**:
-    ```json
-    {
-        "id": "...",
-        "email": "user@example.com",
-        "role": "photographer",
-        "is_active": true
-    }
-    ```
-
-### 6. 画像一時アップロード
-- **POST** `/photographer/temp_upload`
-- **説明**: 画像を一時保存し、サムネイルを返す。認証トークンからユーザーIDを特定する。フルサイズ画像とサムネイル画像の両方がGridFSに一時保存される。
-- **リクエスト (multipart/form-data)**:
-    - `file`: 画像ファイル
-    - `group_id`: string
-- **レスポンス例**:
-    ```json
-    {
-      "thumbnail": "<base64 string>",
-      "filename": "groupid_userid_yyyymmddhhmmssfff_full.jpeg",
-      "thumbnail_filename": "groupid_userid_yyyymmddhhmmssfff_thumb.jpeg",
-      "is_thumbnail_scaled_down": true // サムネイルが縮小されたかどうか
-    }
-    ```
-
-### 7. 一時画像削除
-- **POST** `/photographer/temp_delete`
-- **説明**: ログインユーザーが直近で一時保存したフルサイズ画像とサムネイル画像を削除する。
-- **リクエスト (application/json)**:
-    - `group_id`: string
-- **レスポンス例**:
-    ```json
-    {"deleted": "filename.jpeg"}
-    ```
-
-### 8. アップロード確定
-- **POST** `/photographer/finalize_upload`
-- **説明**: 一時保存画像を本登録する。フルサイズ画像とサムネイル画像の両方の`temporary`フラグを`false`に更新する。
-- **リクエスト (application/json)**:
-    - `group_id`: string
-    - `filenames_data`: array of objects (各オブジェクトは`filename`と`thumbnail_filename`を含む)
-        ```json
-        [
-          {"filename": "full_image1.jpeg", "thumbnail_filename": "thumb_image1.jpeg"},
-          {"filename": "full_image2.jpeg", "thumbnail_filename": "thumb_image2.jpeg"}
-        ]
-        ```
-    - `quality`: string
-    - `comment`: string配列
-- **レスポンス例**:
-    ```json
-    {"success": true}
-    ```
-
----
-
-## 管理者向けエンドポイント `/admin`
+## 3. 運営者向けAPI (`/admin/api/`)
 
 **【権限】: `operator`**
 
-### 9. ログインユーザー情報取得 (管理者)
-- **GET** `/admin/users/me`
-- **説明**: 現在ログインしている運営者のユーザー情報を返す。
-- **レスポンス**: `/photographer/users/me` と同様。
+**【重要】** このセクションのAPIはすべて、認証された運営者自身のデータのみを対象とします。
 
-### 10. 撮影者アカウント管理
-- **GET** `/admin/manage-photographers`: 管理ページ(HTML)を返す。
-- **GET** `/admin/api/photographers`: 撮影者一覧(JSON)を返す。
-- **POST** `/admin/api/photographers`: 新規撮影者を作成する。
-- **DELETE** `/admin/api/photographers/{user_id}`: 撮影者を削除する。
-
-### 11. QRコード生成
-- **GET** `/admin/generate_qr`: 生成ページ(HTML)を返す。
-- **POST** `/admin/generate_qr`: QRコードを生成してHTML内に表示する。
-
-### 12. 登録画像の階層的検索
-- **GET** `/admin/search`
-- **説明**: 登録画像をグループIDの階層で検索・表示する。クエリパラメータの有無でレスポンス形式が変わる。
-- **クエリパラメータ (任意)**:
-    - `group_id`: string
-- **レスポンス**:
-    - **パラメータなしの場合 (JSON)**: グループIDの一覧と各アイテム数を、最新更新順で返す。
-        ```json
-        {
-          "groups": [
-            {
-              "_id": "GROUP_001",
-              "item_count": 15,
-              "last_updated": "2025-10-30T12:30:00Z",
-              "first_created": "2025-10-29T10:00:00Z"
-            },
-            ...
-          ]
-        }
-        ```
-    - **`group_id`指定の場合 (HTML)**: そのグループIDに所属する画像一覧ページのHTMLを返す。
-
-### 13. グループ一覧データ取得API
-- **GET** `/admin/api/groups`
-- **説明**: グループIDの一覧と各アイテム数をJSON形式で返す。管理画面のフォルダ表示に使用される。
-- **レスポンス**: `/admin/search`のパラメータなしの場合と同様。
-
-### 14. グループ内アイテム一覧取得API
-- **GET** `/admin/api/items`
-- **説明**: 指定された`group_id`に所属するアイテム一覧を部分HTML形式で返す。各アイテムのサムネイル画像データがBase64エンコードされて含まれる。
-- **クエリパラメータ**:
-    - `group_id`: string (必須)
-- **レスポンス**: `templates/admin/_search_results.html`のレンダリング結果。
-
-### 15. その他管理機能
-- `/admin/detail/{item_id}`: 画像詳細ページ(HTML)。詳細表示時にはフルサイズ画像が読み込まれる。
-- `/admin/delete/{item_id}`: 画像削除処理
-- `/admin/statistics`: 統計情報ページ(HTML)
-- `/admin/force_reset`: 仮登録データ初期化ページ(HTML)と初期化処理
-
-(※管理者向けエンドポイントの詳細は、実装に合わせて要追記)
+- **GET** `/api/photographers`
+    - **説明**: ログイン中の運営者が作成した撮影者アカウントのリストを返す。
+- **POST** `/api/photographers`
+    - **説明**: 新しい撮影者アカウントを作成し、ログイン中の運営者に紐付ける。
+    - **リクエストボディ**: `{"email": "...", "password": "...", "role": "photographer"}`
+- **DELETE** `/api/photographers/{user_id}`
+    - **説明**: ログイン中の運営者が作成した撮影者アカウントの中から、指定されたIDのアカウントを削除する。
+- **GET** `/api/groups`
+    - **説明**: ログイン中の運営者に紐づく画像グループの一覧を、アイテム数や最終更新日と共に返す。
+- **GET** `/api/items`
+    - **説明**: 指定された`group_id`に属する画像アイテムの一覧を返す（ログイン中の運営者のデータに限る）。
+    - **クエリパラメータ**: `group_id` (string, 必須)
 
 ---
 
-## 外部システム向けエンドポイント `/external_api`
+## 4. 撮影者・運営者共通API (`/photographer/`)
 
-**【権限】: `operator` または `photographer` または `system_admin` (要Bearerトークン)**
+**【権限】: `photographer` または `operator`**
 
-### 16. 画像取得
-- **GET** `/external_api/images/{filename}`
-- **説明**: GridFSに保存された画像ファイルを、ファイル名を指定して取得する。
-- **レスポンス**: `image/jpeg` 形式の画像データ
-
-(※その他の外部向けエンドポイントも同様にBearerトークン認証が必要です)
-
+- **POST** `/temp_upload`
+    - **説明**: 画像を一時保存し、サムネイルを返す。ファイル名は`{operator_id}_{group_id}_{photographer_id}_{timestamp}`の形式で生成される。
+    - **リクエスト (multipart/form-data)**:
+        - `file`: 画像ファイル
+        - `group_id`: string
+        - `operator_id`: string (任意。指定されない場合、ログインユーザーが運営者であればそのIDが使われる)
+- **POST** `/finalize_upload`
+    - **説明**: 一時保存された画像を本登録する。`operator_id`が画像ドキュメントに記録される。
+    - **リクエスト (application/json)**:
+        - `group_id`: string
+        - `operator_id`: string (任意。同上)
+        - `filenames_data`: array of objects `[{"filename": "...", "thumbnail_filename": "..."}]`
+        - `quality`: string
+        - `comment`: array of strings
+- **POST** `/temp_delete`
+    - **説明**: 直近に一時保存した画像を削除する。
+- **GET** `/temp_list`
+    - **説明**: 現在一時保存されているファイルリストを返す。
+- **GET** `/users/me`
+    - **説明**: 現在ログインしているユーザー（撮影者または運営者）の基本情報を返す。
 
 ---

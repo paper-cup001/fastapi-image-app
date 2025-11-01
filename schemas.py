@@ -23,6 +23,7 @@ class UserBase(BaseModel):
     """ユーザーモデルの基本的なフィールドを定義するベースクラス"""
     email: EmailStr = Field(..., description="ユーザーのメールアドレス")
     role: str = Field(..., description="ユーザーの役割（operator or photographer）")
+    created_by_operator_id: Optional[str] = Field(None, description="このユーザーを作成した運営者のID")
 
 class UserCreate(UserBase):
     """ユーザー作成時に受け取るデータのスキーマ"""

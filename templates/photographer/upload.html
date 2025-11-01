@@ -174,10 +174,13 @@
     }
 
     const urlGroupId = getQueryParam('group_id');
+    const urlOperatorId = getQueryParam('operator_id'); // operator_id をURLから取得
+
     if (urlGroupId) {
       $('#group_id').val(urlGroupId);
     }
     let groupId = $('#group_id').val();
+    let operatorId = urlOperatorId; // operatorId を変数に保持
 
     function showGroupId() {
       $('#group-id-display').text('グループID: ' + groupId);
@@ -468,6 +471,9 @@
       const formData = new FormData();
       formData.append('file', fileToUpload);
       formData.append('group_id', groupId);
+      if (operatorId) { // operatorIdが存在する場合のみ追加
+        formData.append('operator_id', operatorId);
+      }
 
       $.ajax({
         url: '/photographer/temp_upload',
@@ -542,6 +548,7 @@
                   contentType: 'application/json',
                   data: JSON.stringify({
                     group_id: groupId,
+                    operator_id: operatorId, // operator_id を追加
                     filenames_data: filenames_data, // filenamesからfilenames_dataに変更
                     quality: $('#quality').val(),
                     comment: comments

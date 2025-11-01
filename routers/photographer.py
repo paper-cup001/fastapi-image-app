@@ -43,10 +43,19 @@ async def photographer_upload_old_redirect(request: Request):
 async def temp_upload(
     file: UploadFile = File(...),
     group_id: str = Form(...),
+    operator_id: str = Form(None), # operator_idをオプショナルで受け取る
     source_page: str = Form(None),
     current_photographer: User = Depends(get_current_photographer)
 ):
     try:
+        # 運営者IDを決定するロジック
+        final_operator_id = operator_id
+        if not final_operator_id:
+            if current_photographer.role == 'operator':
+                final_operator_id = current_photographer.id
+            else:
+                raise HTTPException(status_code=400, detail="Operator ID is required for photographers")
+
         test_mode = os.getenv("TEST_MODE", "False").lower() == "true"
         photographer_id = current_photographer.id
 
@@ -66,10 +75,9 @@ async def temp_upload(
 
         # フルサイズ画像をGridFSに保存 (JPEG形式、品質90)
         full_image_buffer = io.BytesIO()
-        # 画像モードをJPEG互換のRGBに変換（RGBAの場合は透明部分を白で埋める）
         if img_pil.mode == 'RGBA':
-            background = Image.new('RGB', img_pil.size, (255, 255, 255)) # 白背景を作成
-            background.paste(img_pil, mask=img_pil.split()[3]) # アルファチャンネルをマスクとして使用
+            background = Image.new('RGB', img_pil.size, (255, 255, 255))
+            background.paste(img_pil, mask=img_pil.split()[3])
             img_pil = background
         elif img_pil.mode != 'RGB':
             img_pil = img_pil.convert('RGB')
@@ -77,51 +85,53 @@ async def temp_upload(
         full_image_buffer.seek(0)
 
         now = datetime.now(ZoneInfo('Asia/Tokyo'))
-        full_filename = f"{group_id}_{photographer_id}_{now.strftime('%Y%m%d%H%M%S%f')}_full.jpeg"
+        # 新しいファイル名形式
+        full_filename = f"{final_operator_id}_{group_id}_{photographer_id}_{now.strftime('%Y%m%d%H%M%S%f')}_full.jpeg"
 
         fs.put(
             full_image_buffer.getvalue(),
             filename=full_filename,
             group_id=group_id,
+            operator_id=final_operator_id, # メタデータにも追加
             photographer_id=photographer_id,
             temporary=True,
-            uploadDate=datetime.utcnow() # Deletion sorting key
+            uploadDate=datetime.utcnow()
         )
 
         # サムネイル画像を生成しGridFSに保存 (JPEG形式、品質85)
-        thumbnail_pil, was_scaled_down = generate_thumbnail(img_pil, max_size=600) # max_sizeは適宜調整
+        thumbnail_pil, was_scaled_down = generate_thumbnail(img_pil, max_size=600)
         thumbnail_buffer = io.BytesIO()
-        # サムネイルもRGBAモードの可能性があるのでRGBに変換
         if thumbnail_pil.mode == 'RGBA':
-            background = Image.new('RGB', thumbnail_pil.size, (255, 255, 255)) # 白背景を作成
-            background.paste(thumbnail_pil, mask=thumbnail_pil.split()[3]) # アルファチャンネルをマスクとして使用
+            background = Image.new('RGB', thumbnail_pil.size, (255, 255, 255))
+            background.paste(thumbnail_pil, mask=thumbnail_pil.split()[3])
             thumbnail_pil = background
         elif thumbnail_pil.mode != 'RGB':
             thumbnail_pil = thumbnail_pil.convert('RGB')
         thumbnail_pil.save(thumbnail_buffer, format="JPEG", quality=85)
         thumbnail_buffer.seek(0)
 
-        thumbnail_filename = f"{group_id}_{photographer_id}_{now.strftime('%Y%m%d%H%M%S%f')}_thumb.jpeg"
+        # 新しいファイル名形式
+        thumbnail_filename = f"{final_operator_id}_{group_id}_{photographer_id}_{now.strftime('%Y%m%d%H%M%S%f')}_thumb.jpeg"
 
         fs.put(
             thumbnail_buffer.getvalue(),
             filename=thumbnail_filename,
             group_id=group_id,
+            operator_id=final_operator_id, # メタデータにも追加
             photographer_id=photographer_id,
             temporary=True,
             uploadDate=datetime.utcnow(),
-            is_thumbnail=True # サムネイルであることを示すフラグ
+            is_thumbnail=True
         )
 
-        # フロントエンドにはサムネイルをBase64で返す
         thumbnail_buffer.seek(0)
         thumbnail_b64 = base64.b64encode(thumbnail_buffer.getvalue()).decode()
 
         return {
             "thumbnail": thumbnail_b64,
-            "filename": full_filename, # フルサイズ画像のファイル名も返す
-            "thumbnail_filename": thumbnail_filename, # サムネイルのファイル名も返す
-            "is_thumbnail_scaled_down": was_scaled_down # サムネイルが縮小されたかどうかのフラグ
+            "filename": full_filename,
+            "thumbnail_filename": thumbnail_filename,
+            "is_thumbnail_scaled_down": was_scaled_down
         }
 
     except Exception as e:
@@ -151,10 +161,20 @@ async def temp_delete(data: dict = Body(...), current_photographer: User = Depen
 @router.post("/finalize_upload")
 async def finalize_upload(data: dict = Body(...), current_photographer: User = Depends(get_current_photographer)):
     group_id = data.get("group_id")
-    filenames_data = data.get("filenames_data", []) # filenameとthumbnail_filenameのペアを受け取る
+    operator_id = data.get("operator_id") # operator_id を取得 (オプショナル)
+    filenames_data = data.get("filenames_data", [])
     quality = data.get("quality", "")
     comment = data.get("comment", [])
     photographer_id = current_photographer.id
+
+    # operator_idが指定されていない場合のロジック
+    if not operator_id:
+        if current_photographer.role == 'operator':
+            # ログインユーザーが運営者なら、自身のIDをoperator_idとして使用
+            operator_id = current_photographer.id
+        else:
+            # 撮影者でoperator_idがない場合はエラー
+            return JSONResponse(status_code=400, content={"error": "operator_id is required for photographers"})
 
     if not group_id or not filenames_data:
         return JSONResponse(status_code=400, content={"error": "Invalid params"})
@@ -165,13 +185,11 @@ async def finalize_upload(data: dict = Body(...), current_photographer: User = D
             full_filename = item_data.get("filename")
             thumbnail_filename = item_data.get("thumbnail_filename")
 
-            # フルサイズ画像をtemporary: Falseに更新
             file = fs.find_one({"filename": full_filename, "photographer_id": photographer_id, "temporary": True})
             if file:
                 db.fs.files.update_one({"_id": file._id}, {"$set": {"temporary": False}})
                 images.append({"filename": full_filename, "thumbnail_filename": thumbnail_filename, "file_id": str(file._id)})
             
-            # サムネイル画像をtemporary: Falseに更新
             thumb_file = fs.find_one({"filename": thumbnail_filename, "photographer_id": photographer_id, "temporary": True})
             if thumb_file:
                 db.fs.files.update_one({"_id": thumb_file._id}, {"$set": {"temporary": False}})
@@ -181,6 +199,7 @@ async def finalize_upload(data: dict = Body(...), current_photographer: User = D
 
         collection.insert_one({
             "group_id": group_id,
+            "operator_id": operator_id, # ドキュメントに operator_id を追加
             "photographer_id": photographer_id,
             "images": images,
             "title": "", "platform": "", "description": "", "jan_code": "",
@@ -190,6 +209,11 @@ async def finalize_upload(data: dict = Body(...), current_photographer: User = D
             "meta_added": False,
             "db_uploaded": False
         })
+
+        return {"success": True}
+    except Exception as e:
+        logging.error(f"Error in finalize_upload: {e}", exc_info=True)
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
         return {"success": True}
     except Exception as e:

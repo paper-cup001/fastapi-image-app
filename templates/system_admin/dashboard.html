@@ -20,11 +20,68 @@
                     </div>
                 </header>
 
-                <main class="text-center bg-white p-4 rounded">
-                    <h1 class="mb-4">ようこそ！</h1>
-                    <p class="lead">ここはシステム管理者用のダッシュボードです。</p>
-                    <p>今後、ここに運営者の管理機能やシステム全体の統計情報を追加していきます。</p>
+                <!-- 運営者管理セクション -->
+                <main class="bg-white p-4 rounded">
+                    <section id="operator-management">
+                        <h2 class="mb-4">運営者アカウント管理</h2>
+                        <div class="card mb-4">
+                            <div class="card-header">新規運営者作成</div>
+                            <div class="card-body">
+                                <form id="create-operator-form">
+                                    <div class="row g-3 align-items-end">
+                                        <div class="col-md">
+                                            <label for="email" class="form-label">メールアドレス</label>
+                                            <input type="email" class="form-control" id="email" required autocomplete="email">
+                                        </div>
+                                        <div class="col-md">
+                                            <label for="password" class="form-label">パスワード</label>
+                                            <input type="password" class="form-control" id="password" required autocomplete="current-password">
+                                        </div>
+                                        <div class="col-md-auto">
+                                            <button type="submit" class="btn btn-primary">作成</button>
+                                        </div>
+                                    </div>
+                                </form>
+                                <div id="form-error" class="text-danger mt-2"></div>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header">運営者一覧</div>
+                            <div class="card-body">
+                                <div id="operator-list-error" class="text-danger mb-2"></div>
+                                <ul class="list-group" id="operator-list"></ul>
+                            </div>
+                        </div>
+                    </section>
                 </main>
+
+                <!-- 孤立データ管理セクション -->
+                <section id="orphaned-data-management" class="mt-4">
+                    <main class="bg-white p-4 rounded">
+                        <h2 class="mb-4">孤立データ管理</h2>
+                        <p class="text-muted">過去のバージョンから引き継がれた、所有者（運営者）が不明なデータやアカウントを整理します。</p>
+                        <div class="card mb-4">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span>孤立した撮影者アカウント</span>
+                                <button id="find-orphaned-photographers" class="btn btn-sm btn-info">検索</button>
+                            </div>
+                            <div class="card-body" id="orphaned-photographers-section" style="display: none;">
+                                <div id="orphaned-photographers-error" class="text-danger mb-2"></div>
+                                <ul class="list-group" id="orphaned-photographers-list"></ul>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span>孤立した画像グループ</span>
+                                <button id="find-orphaned-groups" class="btn btn-sm btn-info">検索</button>
+                            </div>
+                            <div class="card-body" id="orphaned-groups-section" style="display: none;">
+                                <div id="orphaned-groups-error" class="text-danger mb-2"></div>
+                                <ul class="list-group" id="orphaned-groups-list"></ul>
+                            </div>
+                        </div>
+                    </main>
+                </section>
 
                 <footer class="mt-5 text-muted small text-center">
                     &copy; 2024 Retro Game Image Upload
@@ -34,45 +91,284 @@
     </div>
 
     <script>
-        // ログインしているユーザーの情報を取得する関数
-        async function fetchCurrentUser() {
-            try {
-                const response = await fetch('/system_admin/users/me');
-                if (response.ok) {
-                    const user = await response.json();
-                    document.getElementById('user-info').innerHTML = `
-                        <span class="me-3">ログイン中: <strong>${user.email}</strong> (${user.role})</span>
-                        <button class="btn btn-sm btn-outline-secondary" onclick="logout()">ログアウト</button>
-                    `;
-                } else {
-                    window.location.href = '/login';
-                }
-            } catch (error) {
-                console.error('ユーザー情報の取得に失敗しました:', error);
-                window.location.href = '/login';
-            }
-        }
+document.addEventListener('DOMContentLoaded', () => {
+    // --- グローバル変数 & 共通関数 ---
+    let allOperators = []; // 運営者リストをキャッシュする変数
 
-        // ログアウト処理
-        async function logout() {
-            try {
-                const response = await fetch('/logout', {
-                    method: 'POST',
-                });
-                // サーバーがリダイレクトを処理するはずだが、念のためクライアント側でも処理
-                if (response.redirected) {
-                    window.location.href = response.url;
-                } else {
-                    window.location.href = '/login';
-                }
-            } catch (error) {
-                console.error('ログアウト処理中にエラーが発生しました:', error);
-                window.location.href = '/login';
-            }
-        }
+    // --- DOM要素の取得 ---
+    const userInfo = document.getElementById('user-info');
+    // 運営者管理
+    const operatorListEl = document.getElementById('operator-list');
+    const createOperatorForm = document.getElementById('create-operator-form');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const formError = document.getElementById('form-error');
+    const operatorListError = document.getElementById('operator-list-error');
+    // 孤立データ管理 (撮影者)
+    const findOrphanedPhotographersBtn = document.getElementById('find-orphaned-photographers');
+    const orphanedPhotographersSection = document.getElementById('orphaned-photographers-section');
+    const orphanedPhotographersListEl = document.getElementById('orphaned-photographers-list');
+    const orphanedPhotographersError = document.getElementById('orphaned-photographers-error');
+    // 孤立データ管理 (画像グループ)
+    const findOrphanedGroupsBtn = document.getElementById('find-orphaned-groups');
+    const orphanedGroupsSection = document.getElementById('orphaned-groups-section');
+    const orphanedGroupsListEl = document.getElementById('orphaned-groups-list');
+    const orphanedGroupsError = document.getElementById('orphaned-groups-error');
 
-        // ページ読み込み時にユーザー情報を取得
-        document.addEventListener('DOMContentLoaded', fetchCurrentUser);
+    // --- API呼び出し関数 ---
+    async function fetchAPI(url, options = {}) {
+        try {
+            const response = await fetch(url, options);
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+                throw new Error(errorData.detail || `エラーが発生しました (HTTP ${response.status})`);
+            }
+            if (response.status === 204) return null; // No Content
+            return await response.json();
+        } catch (error) {
+            console.error(`API Error (${url}):`, error);
+            throw error;
+        }
+    }
+
+    // --- 認証関連 ---
+    async function fetchCurrentUser() {
+        try {
+            const user = await fetchAPI('/system_admin/users/me');
+            userInfo.innerHTML = `
+                <span class="me-3">ログイン中: <strong>${user.email}</strong> (${user.role})</span>
+                <button id="logout-btn" class="btn btn-sm btn-outline-secondary">ログアウト</button>
+            `;
+            document.getElementById('logout-btn').addEventListener('click', logout);
+        } catch (error) {
+            window.location.href = '/login';
+        }
+    }
+
+    async function logout() {
+        try {
+            // ログアウトエンドポイントはJSONを返さないので、fetchAPIヘルパーは使わない
+            const response = await fetch('/logout', { method: 'POST' });
+            // サーバーがリダイレクトを処理し、クッキーを削除する。
+            // クライアント側では、手動でログインページにリダイレクトする。
+            if (response.ok || response.redirected) {
+                window.location.href = '/login';
+            } else {
+                throw new Error('Logout request failed');
+            }
+        } catch (error) {
+            console.error('Logout failed:', error);
+            alert('ログアウト処理中にエラーが発生しました。');
+            // エラーが発生した場合も、フォールバックとしてログインページへ移動を試みる
+            window.location.href = '/login';
+        }
+    }
+
+    // --- 運営者管理機能 ---
+    async function fetchAndDisplayOperators() {
+        operatorListError.textContent = '';
+        try {
+            const operators = await fetchAPI('/system_admin/api/operators');
+            allOperators = operators; // キャッシュを更新
+            operatorListEl.innerHTML = '';
+            if (operators.length === 0) {
+                operatorListEl.innerHTML = '<li class="list-group-item">現在、運営者はいません。</li>';
+                return;
+            }
+            operators.forEach(op => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                const createdDate = new Date(op.created_at).toLocaleString('ja-JP');
+                li.innerHTML = `
+                    <div>
+                        <span class="fw-bold">${op.email}</span>
+                        <small class="text-muted ms-2">作成日: ${createdDate}</small>
+                    </div>
+                    <button class="btn btn-sm btn-danger delete-operator-btn" data-user-id="${op._id}">削除</button>
+                `;
+                operatorListEl.appendChild(li);
+            });
+        } catch (error) {
+            operatorListError.textContent = error.message;
+        }
+    }
+
+    async function createOperator(e) {
+        e.preventDefault();
+        formError.textContent = '';
+        try {
+            await fetchAPI('/system_admin/api/operators', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: emailInput.value,
+                    password: passwordInput.value,
+                    role: 'operator'
+                }),
+            });
+            emailInput.value = '';
+            passwordInput.value = '';
+            await fetchAndDisplayOperators();
+        } catch (error) {
+            formError.textContent = error.message;
+        }
+    }
+
+    async function deleteOperator(userId) {
+        if (!confirm('本当にこの運営者を削除しますか？')) return;
+        try {
+            await fetchAPI(`/system_admin/api/operators/${userId}`, { method: 'DELETE' });
+            await fetchAndDisplayOperators();
+        } catch (error) {
+            alert(error.message);
+        }
+    }
+
+    // --- 孤立データ管理機能 ---
+    function createOperatorDropdown(idPrefix) {
+        if (allOperators.length === 0) {
+            return '<span class="text-danger">割当可能な運営者がいません。</span>';
+        }
+        let options = allOperators.map(op => `<option value="${op._id}">${op.email}</option>`).join('');
+        return `<select id="${idPrefix}-operator-select" class="form-select form-select-sm w-auto d-inline-block">${options}</select>`;
+    }
+
+    // 孤立した撮影者
+    async function findOrphanedPhotographers() {
+        orphanedPhotographersSection.style.display = 'block';
+        orphanedPhotographersListEl.innerHTML = '<li class="list-group-item">検索中...</li>';
+        orphanedPhotographersError.textContent = '';
+        try {
+            const photographers = await fetchAPI('/system_admin/api/orphaned-photographers');
+            orphanedPhotographersListEl.innerHTML = '';
+            if (photographers.length === 0) {
+                orphanedPhotographersListEl.innerHTML = '<li class="list-group-item">孤立した撮影者アカウントは見つかりませんでした。</li>';
+                return;
+            }
+            photographers.forEach(p => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item d-flex justify-content-between align-items-center flex-wrap';
+                const dropdownId = `photographer-${p._id}`;
+                li.innerHTML = `
+                    <span class="me-auto">${p.email}</span>
+                    <div class="mt-2 mt-md-0">
+                        ${createOperatorDropdown(dropdownId)}
+                        <button class="btn btn-sm btn-success ms-2 assign-photographer-btn" data-photographer-id="${p._id}" data-dropdown-id="${dropdownId}">割当</button>
+                        <button class="btn btn-sm btn-danger ms-1 delete-orphaned-photographer-btn" data-photographer-id="${p._id}">削除</button>
+                    </div>
+                `;
+                orphanedPhotographersListEl.appendChild(li);
+            });
+        } catch (error) {
+            orphanedPhotographersError.textContent = error.message;
+        }
+    }
+
+    async function assignOperatorToPhotographer(photographerId, dropdownId) {
+        const select = document.getElementById(`${dropdownId}-operator-select`);
+        const operatorId = select.value;
+        if (!confirm(`${select.options[select.selectedIndex].text} にこの撮影者を割り当てますか？`)) return;
+        try {
+            await fetchAPI(`/system_admin/api/photographers/${photographerId}/assign-operator`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ operator_id: operatorId })
+            });
+            alert('割り当てに成功しました。');
+            await findOrphanedPhotographers();
+        } catch (error) {
+            alert(error.message);
+        }
+    }
+
+    async function deleteOrphanedPhotographer(photographerId) {
+        if (!confirm('本当にこの撮影者を削除しますか？この操作は元に戻せません。')) return;
+        try {
+            await fetchAPI(`/system_admin/api/orphaned-photographers/${photographerId}`, { method: 'DELETE' });
+            alert('削除に成功しました。');
+            await findOrphanedPhotographers();
+        } catch (error) {
+            alert(error.message);
+        }
+    }
+
+    // 孤立した画像グループ
+    async function findOrphanedGroups() {
+        orphanedGroupsSection.style.display = 'block';
+        orphanedGroupsListEl.innerHTML = '<li class="list-group-item">検索中...</li>';
+        orphanedGroupsError.textContent = '';
+        try {
+            const groups = await fetchAPI('/system_admin/api/orphaned-image-groups');
+            orphanedGroupsListEl.innerHTML = '';
+            if (groups.length === 0) {
+                orphanedGroupsListEl.innerHTML = '<li class="list-group-item">孤立した画像グループは見つかりませんでした。</li>';
+                return;
+            }
+            groups.forEach(g => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item d-flex justify-content-between align-items-center flex-wrap';
+                const dropdownId = `group-${g.group_id.replace(/\W/g, '_')}`;
+                li.innerHTML = `
+                    <span class="me-auto">グループID: <strong>${g.group_id}</strong> (${g.item_count}件)</span>
+                    <div class="mt-2 mt-md-0">
+                        <a href="/system_admin/api/image-groups/download/${g.group_id}" class="btn btn-sm btn-success ms-2" target="_blank">ダウンロード (ZIP)</a>
+                        <button class="btn btn-sm btn-danger ms-1 delete-group-btn" data-group-id='${JSON.stringify(g.group_id)}'>削除</button>
+                    </div>
+                `;
+                orphanedGroupsListEl.appendChild(li);
+            });
+        } catch (error) {
+            orphanedGroupsError.textContent = error.message;
+        }
+    }
+
+    async function deleteOrphanedGroup(groupId) {
+        if (!confirm(`本当にグループ「${groupId}」を削除しますか？この操作は元に戻せません。`)) return;
+        try {
+            await fetchAPI(`/system_admin/api/image-groups/${groupId}`, { method: 'DELETE' });
+            alert('削除に成功しました。');
+            await findOrphanedGroups();
+        } catch (error) {
+            alert(error.message);
+        }
+    }
+
+    // --- イベントリスナーの初期化 ---
+    async function initialize() {
+        await fetchCurrentUser();
+        await fetchAndDisplayOperators();
+        
+        createOperatorForm.addEventListener('submit', createOperator);
+
+        operatorListEl.addEventListener('click', e => {
+            if (e.target.classList.contains('delete-operator-btn')) {
+                deleteOperator(e.target.dataset.userId);
+            }
+        });
+
+        findOrphanedPhotographersBtn.addEventListener('click', findOrphanedPhotographers);
+        findOrphanedGroupsBtn.addEventListener('click', findOrphanedGroups);
+
+        orphanedPhotographersListEl.addEventListener('click', e => {
+            if (e.target.classList.contains('assign-photographer-btn')) {
+                const { photographerId, dropdownId } = e.target.dataset;
+                assignOperatorToPhotographer(photographerId, dropdownId);
+            }
+            if (e.target.classList.contains('delete-orphaned-photographer-btn')) {
+                deleteOrphanedPhotographer(e.target.dataset.photographerId);
+            }
+        });
+
+        orphanedGroupsListEl.addEventListener('click', e => {
+            if (e.target.classList.contains('delete-group-btn')) {
+                const groupId = JSON.parse(e.target.dataset.groupId);
+                deleteOrphanedGroup(groupId);
+            }
+        });
+    }
+
+    initialize();
+});
     </script>
 </body>
 </html>

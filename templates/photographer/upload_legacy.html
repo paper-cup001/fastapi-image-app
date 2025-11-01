@@ -156,12 +156,15 @@
       }
 
       var urlGroupId = getQueryParam('group_id');
+      var urlOperatorId = getQueryParam('operator_id'); // operator_id をURLから取得
+
       if (urlGroupId) {
         $('#group_id_input').val(urlGroupId);
       } else {
         $('#group_id_input').val('sample_001');
       }
       var groupId = $('#group_id_input').val();
+      var operatorId = urlOperatorId; // operatorId を変数に保持
 
       function showGroupId() {
         // No longer needed, as the input field shows the value
@@ -222,6 +225,9 @@
         var formData = new FormData();
         formData.append('file', fileOrBlob, filename);
         formData.append('group_id', groupId);
+        if (operatorId) { // operatorIdが存在する場合のみ追加
+          formData.append('operator_id', operatorId);
+        }
         formData.append('source_page', 'upload_old');
 
         $.ajax({
@@ -296,6 +302,7 @@
           contentType: 'application/json',
           data: JSON.stringify({
             group_id: groupId,
+            operator_id: operatorId, // operator_id を追加
             filenames_data: filenames_data, // filenamesからfilenames_dataに変更
             quality: $('#quality').val(),
             comment: comments
